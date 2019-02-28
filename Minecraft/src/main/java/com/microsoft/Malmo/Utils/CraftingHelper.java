@@ -41,6 +41,7 @@ import net.minecraft.block.properties.IProperty;
 import net.minecraft.block.properties.PropertyDirection;
 import net.minecraft.block.properties.PropertyEnum;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.init.Blocks;
@@ -202,6 +203,32 @@ public class CraftingHelper
         return true;
     }
 
+    /** Inspect a player's inventory to see whether they have enough items to form the supplied list of ItemStacks.<br>
+     * The ingredients list MUST be amalgamated such that no two ItemStacks contain the same type of item.
+     * @param player
+     * @param ingredients an amalgamated list of ingredients
+     * @return true if the player's inventory contains sufficient quantities of all the required items.
+     */
+    public static boolean playerHasIngredients(EntityPlayerSP player, List<ItemStack> ingredients)
+    {
+        NonNullList<ItemStack> main = player.inventory.mainInventory;
+        NonNullList<ItemStack> arm = player.inventory.armorInventory;
+
+        for (ItemStack isIngredient : ingredients)
+        {
+            int target = isIngredient.getCount();
+            for (int i = 0; i < main.size() + arm.size() && target > 0; i++)
+            {
+                ItemStack isPlayer = (i >= main.size()) ? arm.get(i - main.size()) : main.get(i);
+                if (isPlayer != null && isIngredient != null && itemStackIngredientsMatch(isPlayer, isIngredient))
+                    target -= isPlayer.getCount();
+            }
+            if (target > 0)
+                return false;   // Don't have enough of this.
+        }
+        return true;
+    }
+
     /** Compare two ItemStacks and see if their items match - take wildcards into account, don't take stacksize into account.
      * @param A ItemStack A
      * @param B ItemStack B
@@ -338,7 +365,7 @@ public class CraftingHelper
             if (obj instanceof IRecipe)
             {
                 ItemStack is = ((IRecipe)obj).getRecipeOutput();
-                if (is == null)
+                if (is == null || target == null)
                     continue;
                 if (ItemStack.areItemsEqual(is, target))
                 {

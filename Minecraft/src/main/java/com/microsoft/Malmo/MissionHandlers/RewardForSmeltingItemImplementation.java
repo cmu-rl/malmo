@@ -10,47 +10,33 @@ import com.microsoft.Malmo.MalmoMod.MalmoMessageType;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IRewardProducer;
 import com.microsoft.Malmo.Schemas.BlockOrItemSpecWithReward;
 import com.microsoft.Malmo.Schemas.MissionInit;
-import com.microsoft.Malmo.Schemas.RewardForCollectingItem;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import net.minecraft.entity.player.EntityPlayerMP;
+import com.microsoft.Malmo.Schemas.RewardForSmeltingItem;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.player.EntityItemPickupEvent;
-import net.minecraftforge.fml.common.eventhandler.Event;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.network.ByteBufUtils;
-
-import javax.xml.bind.DatatypeConverter;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 
 /**
  * @author Cayden Codel, Carnegie Mellon University
  * <p>
- * Sends a reward when the agent collected the specified item with
- * specified amounts. Counter is absolute.
+ * Sends a reward when the agent smelts the specified item with
+ * specified amounts.
  */
-public class RewardForCollectingItemImplementation extends RewardForItemBase
+public class RewardForSmeltingItemImplementation extends RewardForItemBase
         implements IRewardProducer, IMalmoMessageListener {
 
-    private RewardForCollectingItem params;
+    private RewardForSmeltingItem params;
     private ArrayList<ItemMatcher> matchers;
     private HashMap<String, Integer> craftedItems;
+    private int callSmelt = 0;
 
     @SubscribeEvent
-    public void onPickupItem(EntityItemPickupEvent event) {
-        if (event.getItem() != null) {
-            checkForMatch(event.getItem().getEntityItem());
-            if (event.getEntityPlayer() instanceof EntityPlayerMP)
-                sendItemStackToClient((EntityPlayerMP) event.getEntityPlayer(), MalmoMessageType.SERVER_COLLECTITEM, event.getItem().getEntityItem());
-        }
-    }
+    public void onItemSmelt(PlayerEvent.ItemSmeltedEvent event) {
+        if (callSmelt % 4 == 0)
+            checkForMatch(event.smelting);
 
-    @SubscribeEvent
-    public void onGainItem(GainItemEvent event) {
-        if (event.stack != null) {
-            accumulateReward(this.params.getDimension(), event.stack);
-        }
+        callSmelt = (callSmelt + 1) % 4;
     }
 
     /**
@@ -74,7 +60,7 @@ public class RewardForCollectingItemImplementation extends RewardForItemBase
         return false;
     }
 
-    private int getCollectedItemCount(ItemStack is) {
+    private int getSmeltedItemCount(ItemStack is) {
         boolean variant = getVariant(is);
 
         if (variant)
@@ -84,7 +70,7 @@ public class RewardForCollectingItemImplementation extends RewardForItemBase
                     : craftedItems.get(is.getItem().getUnlocalizedName());
     }
 
-    private void addCollectedItemCount(ItemStack is) {
+    private void addSmeltedItemCount(ItemStack is) {
         boolean variant = getVariant(is);
 
         int prev = (craftedItems.get(is.getUnlocalizedName()) == null ? 0
@@ -96,54 +82,56 @@ public class RewardForCollectingItemImplementation extends RewardForItemBase
     }
 
     private void checkForMatch(ItemStack is) {
-        int savedCollected = getCollectedItemCount(is);
-        if (is != null) {
-            for (ItemMatcher matcher : this.matchers) {
-                if (matcher.matches(is)) {
-                    if (!params.isSparse()) {
-                        if (savedCollected != 0 && savedCollected < matcher.matchSpec.getAmount()) {
-                            for (int i = savedCollected; i < matcher.matchSpec.getAmount()
-                                    && i - savedCollected < is.getCount(); i++) {
-                                this.adjustAndDistributeReward(
-                                        ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
-                                        params.getDimension(),
-                                        ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
-                            }
-
-                        } else if (savedCollected != 0 && savedCollected >= matcher.matchSpec.getAmount()) {
-                            // Do nothing
-                        } else {
-                            for (int i = 0; i < is.getCount() && i < matcher.matchSpec.getAmount(); i++) {
-                                this.adjustAndDistributeReward(
-                                        ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
-                                        params.getDimension(),
-                                        ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
-                            }
+        System.out.println("[REWARD] Checking stack " + is.getUnlocalizedName() + " " + is.getCount());
+        int savedSmelted = getSmeltedItemCount(is);
+        System.out.println("[REWARD] Previous saved amount is " + savedSmelted);
+        for (ItemMatcher matcher : this.matchers) {
+            if (matcher.matches(is)) {
+                if (!params.isSparse()) {
+                    if (savedSmelted != 0 && savedSmelted < matcher.matchSpec.getAmount()) {
+                        for (int i = savedSmelted; i < matcher.matchSpec.getAmount()
+                                && i - savedSmelted < is.getCount(); i++) {
+                            System.out.println("Giving reward");
+                            this.adjustAndDistributeReward(
+                                    ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
+                                    params.getDimension(),
+                                    ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
                         }
+                    } else if (savedSmelted != 0 && savedSmelted >= matcher.matchSpec.getAmount()) {
+                        // Do nothing
                     } else {
-                        if (savedCollected < matcher.matchSpec.getAmount()
-                                && savedCollected + is.getCount() >= matcher.matchSpec.getAmount()) {
+                        for (int i = 0; i < is.getCount() && i < matcher.matchSpec.getAmount(); i++) {
+                            System.out.println("Giving reward");
                             this.adjustAndDistributeReward(
                                     ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
                                     params.getDimension(),
                                     ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
                         }
                     }
+                } else {
+                    if (savedSmelted < matcher.matchSpec.getAmount()
+                            && savedSmelted + is.getCount() >= matcher.matchSpec.getAmount()) {
+                        System.out.println("Giving reward");
+                        this.adjustAndDistributeReward(
+                                ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
+                                params.getDimension(),
+                                ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
+                    }
                 }
             }
-
-            addCollectedItemCount(is);
         }
+
+        addSmeltedItemCount(is);
     }
 
     @Override
     public boolean parseParameters(Object params) {
-        if (!(params instanceof RewardForCollectingItem))
+        if (!(params instanceof RewardForSmeltingItem))
             return false;
 
         matchers = new ArrayList<ItemMatcher>();
 
-        this.params = (RewardForCollectingItem) params;
+        this.params = (RewardForSmeltingItem) params;
         for (BlockOrItemSpecWithReward spec : this.params.getItem())
             this.matchers.add(new ItemMatcher(spec));
 
@@ -172,21 +160,5 @@ public class RewardForCollectingItemImplementation extends RewardForItemBase
 
     @Override
     public void onMessage(MalmoMessageType messageType, Map<String, String> data) {
-        String buffString = data.get("message");
-        ByteBuf buf = Unpooled.copiedBuffer(DatatypeConverter.parseBase64Binary(buffString));
-        ItemStack itemStack = ByteBufUtils.readItemStack(buf);
-        if (itemStack != null) {
-            accumulateReward(this.params.getDimension(), itemStack);
-        } else {
-            System.out.println("Error - couldn't understand the itemstack we received.");
-        }
-    }
-
-    public static class GainItemEvent extends Event {
-        public final ItemStack stack;
-
-        public GainItemEvent(ItemStack stack) {
-            this.stack = stack;
-        }
     }
 }

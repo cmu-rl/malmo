@@ -104,7 +104,7 @@ public class SimpleCraftCommandsImplementation extends CommandBase
     @Override
     public boolean parseParameters(Object params)
     {
-        if (params == null || !(params instanceof SimpleCraftCommands))
+        if (!(params instanceof SimpleCraftCommands))
             return false;
         
         SimpleCraftCommands cparams = (SimpleCraftCommands)params;
