@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://ProjectMalmo.microsoft.com" 
-  xmlns="http://ProjectMalmo.microsoft.com" 
-  xmlns:jaxb="http://java.sun.com/xml/ns/jaxb" elementFormDefault="qualified" jaxb:version="2.1" version="0.37">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://ProjectMalmo.microsoft.com"
+           xmlns="http://ProjectMalmo.microsoft.com"
+           xmlns:jaxb="http://java.sun.com/xml/ns/jaxb"
+           elementFormDefault="qualified"
+           jaxb:version="2.1"
+           version="0.37">
 
     <xs:include schemaLocation="Types.xsd" />
     <xs:include schemaLocation="Mission.xsd" />
@@ -1006,6 +1010,7 @@
                         <xs:enumeration value="sphere"/>
                         <xs:enumeration value="circle"/>
                         <xs:enumeration value="surface"/>
+                        <xs:enumeration value="fixed_surface"/>
                     </xs:restriction>
                 </xs:simpleType>
             </xs:element>
@@ -1589,26 +1594,6 @@
             </xs:simpleType>
         </xs:attribute>
     </xs:complexType>
-    
-
-  <xs:element name="PauseCommand">
-    <xs:annotation>
-      <xs:documentation>
-                When present, the Mod will accept the pause command for payusing missions.
-      </xs:documentation>
-    </xs:annotation>
-    <xs:complexType/>
-  </xs:element>
-
-  <xs:element name="CameraCommands">
-    <xs:annotation>
-      <xs:documentation>
-                This command accepts camera commands. The command is "camera {yaw} {pitch}"
-      </xs:documentation>
-    </xs:annotation>
-    <xs:complexType/>
-  </xs:element>
-  
 
     <!-- The actual command handlers.-->
 
@@ -1914,6 +1899,23 @@
         </xs:complexType>
     </xs:element>
 
+    <xs:element name="PauseCommand">
+        <xs:annotation>
+            <xs:documentation>
+                When present, the Mod will accept the pause command for payusing missions.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:complexType/>
+    </xs:element>
+
+    <xs:element name="CameraCommands">
+        <xs:annotation>
+            <xs:documentation>
+                This command accepts camera commands. The command is "camera {yaw} {pitch}"
+            </xs:documentation>
+        </xs:annotation>
+        <xs:complexType/>
+    </xs:element>
     <!--=========================================== OBSERVATION PRODUCERS ===========================================-->
 
     <xs:element name="ObservationFromRecentCommands">
@@ -2117,7 +2119,7 @@
             </xs:documentation>
         </xs:annotation>
         <xs:complexType>
-            <xs:choice minOccurs="1" maxOccurs="unbounded" >
+            <xs:choice minOccurs="1" maxOccurs="unbounded">
                 <xs:element name="Grid" type="GridDefinition" />
             </xs:choice>
         </xs:complexType>
@@ -2161,7 +2163,7 @@
             </xs:documentation>
         </xs:annotation>
         <xs:complexType>
-            <xs:choice minOccurs="1" maxOccurs="unbounded" >
+            <xs:choice minOccurs="1" maxOccurs="unbounded">
                 <xs:element name="Range" type="RangeDefinition" />
             </xs:choice>
         </xs:complexType>
@@ -2182,7 +2184,6 @@
         </xs:annotation>
         <xs:complexType/>
     </xs:element>
-
 
     <xs:element name="ObservationFromCompass">
         <xs:annotation>
@@ -2214,8 +2215,6 @@
         </xs:annotation>
         <xs:complexType/>
     </xs:element>
-
-
 
     <!--============================================= REWARD PRODUCERS ==============================================-->
 
@@ -2626,9 +2625,13 @@
             <xs:documentation>
                 Reward type for {{{RewardForDistanceTraveledToCompassTarget}}}:
 
-                - {{{PER_TICK}}} - reward the distance traveled twards compass target each tick
+    <xs:simpleType name="Command">
+        <xs:union memberTypes="ContinuousMovementCommand AbsoluteMovementCommand DiscreteMovementCommand InventoryCommand ChatCommand SimpleCraftCommand NearbyCraftCommand NearbySmeltCommand MissionQuitCommand HumanLevelCommand"/>
+    </xs:simpleType>
 
-                - {{{PER_TICK_ACCUMULATED}}} - the reward will be adjusted by the delta at each tick, and the current total sent. E.G. If the agent moves forward to the target and then back to start the reward will be 0
+    <xs:simpleType name="CommandList">
+        <xs:list itemType="Command"/>
+    </xs:simpleType>
 
                 - {{{MISSION_END}}} - the reward will be adjusted by the delta at each tick, but no reward will be sent until the mission ends. Eg: if the initial reward is 1000, the delta is -1, and the mission runs for 800 ticks, then final reward sent will be 200.
             </xs:documentation>
