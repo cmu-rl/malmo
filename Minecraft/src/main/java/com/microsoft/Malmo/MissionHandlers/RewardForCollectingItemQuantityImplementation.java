@@ -128,7 +128,9 @@ public class RewardForCollectingItemQuantityImplementation extends RewardForItem
                     savedCollected = getCollectedItemCount(is) % matcher.matchSpec.getAmount();
                 }
                 if (matcher.matches(is)) {
+                    // If the item matches we calculate the reward given to the agent 
                     if (!params.isSparse()) {
+                        // Sparse rewards are only given once to the agent, once the amount is reached
                         if (savedCollected != 0 && savedCollected < matcher.matchSpec.getAmount()) {
                             for (int i = savedCollected; i < matcher.matchSpec.getAmount()
                                     && i - savedCollected < is.getCount(); i++) {
