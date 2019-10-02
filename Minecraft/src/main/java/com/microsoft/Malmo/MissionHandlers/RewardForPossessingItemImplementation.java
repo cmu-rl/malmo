@@ -240,46 +240,6 @@ public class RewardForPossessingItemImplementation extends RewardForItemBase imp
                             addCachedReward(dimension, adjusted_reward);
                         }
                     }
-
-
-
-
-
-                    // //Three modes are supported - 
-                    // // sparse, give reward only once when the specified ammount is reached.
-                    // if (!params.isSparse()) {
-                    //     if (savedCollected != 0 && savedCollected < matcher.matchSpec.getAmount()) {
-                    //         for (int i = savedCollected; i < matcher.matchSpec.getAmount() && i - savedCollected < item_stack.getCount(); i++) {
-                    //             if (i >= maxCollected) {
-                    //                 int dimension = params.getDimension();
-                    //                 float adjusted_reward = this.adjustAndDistributeReward(
-                    //                         ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
-                    //                         params.getDimension(),
-                    //                         ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
-                    //                 addCachedReward(dimension, adjusted_reward);
-                    //             }
-                    //         }
-                    //     } else if (savedCollected == 0)
-                    //         for (int i = 0; i < item_stack.getCount() && i < matcher.matchSpec.getAmount(); i++) {
-                    //             if (i >= maxCollected) {
-                    //                 int dimension = params.getDimension();
-                    //                 float adjusted_reward = this.adjustAndDistributeReward(
-                    //                         ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
-                    //                         params.getDimension(),
-                    //                         ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
-                    //                 addCachedReward(dimension, adjusted_reward);
-                    //             }
-                    //         }
-                    // // (not sparse), give the reward every time the specified ammount is reached.
-                    // } else if (savedCollected < matcher.matchSpec.getAmount()
-                    //         && savedCollected + item_stack.getCount() >= matcher.matchSpec.getAmount()) {
-                    //     int dimension = params.getDimension();
-                    //     float adjusted_reward = this.adjustAndDistributeReward(
-                    //             ((BlockOrItemSpecWithReward) matcher.matchSpec).getReward().floatValue(),
-                    //             params.getDimension(),
-                    //             ((BlockOrItemSpecWithReward) matcher.matchSpec).getDistribution());
-                    //     addCachedReward(dimension, adjusted_reward);
-                    // }
                 }
             }
 
