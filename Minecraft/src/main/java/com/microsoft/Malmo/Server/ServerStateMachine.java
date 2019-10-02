@@ -828,28 +828,6 @@ public class ServerStateMachine extends StateMachine
                 disablePlayerGracePeriod(player);   // Otherwise player will be invulnerable for the first 60 ticks.
                 player.extinguish();	// In case the player was left burning.
 
-                // // Set their initial position and speed:
-                // PosAndDirection pos = as.getAgentStart().getPlacement();
-
-                // if (pos != null) {
-                //     player.rotationYaw = pos.getYaw().floatValue();
-                //     player.rotationPitch = pos.getPitch().floatValue();
-                //     player.setPositionAndUpdate(pos.getX().doubleValue(),pos.getY().doubleValue(),pos.getZ().doubleValue());
-                //     player.onUpdate();	// Needed to force scene to redraw
-                // }
-                // player.setVelocity(0, 0, 0);	// Minimise chance of drift!
-                // as.getAgentStart().setPlacement(pos);
-                
-
-                // // Set their inventory:
-                // if (as.getAgentStart().getInventory() != null)
-                //     initialiseInventory(player, as.getAgentStart().getInventory());
-                // // And their Ender inventory:
-                // if (as.getAgentStart().getEnderBoxInventory() != null)
-                //     initialiseEnderInventory(player, as.getAgentStart().getEnderBoxInventory());
-
-                // // Set their game mode to spectator for now, to protect them while we wait for the rest of the cast to assemble:
-                // player.setGameType(GameType.SPECTATOR);
 
                 // Set their inventory:
                 if (as.getAgentStart().getInventory() != null)
