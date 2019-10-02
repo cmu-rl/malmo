@@ -866,6 +866,7 @@ public class ServerStateMachine extends StateMachine
                 
                 // Set their initial position and speed:
                 PosAndDirection pos = as.getAgentStart().getPlacement();
+
                 if (pos != null) {
                     player.rotationYaw = pos.getYaw().floatValue();
                     player.rotationPitch = pos.getPitch().floatValue();
