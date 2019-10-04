@@ -57,6 +57,7 @@ public class RewardForPossessingItemImplementation extends RewardForItemBase imp
      */
     private HashMap<String, Integer> maxPossessedItems;
 
+    // Note - subscribing toonItemCraft or onItemSmelt will cause those items to be dobule counted
     @SubscribeEvent
     public void onGainItem(RewardForCollectingItemImplementation.GainItemEvent event) {
         if (event.stack != null)
@@ -69,19 +70,6 @@ public class RewardForPossessingItemImplementation extends RewardForItemBase imp
             checkForMatch(event.getItem().getEntityItem());
     }
 
-    // These events are double counted when performed by agents
-    // @SubscribeEvent
-    // public void onItemCraft(PlayerEvent.ItemCraftedEvent event) {
-    //     if (event.player instanceof EntityPlayerMP && !event.crafting.isEmpty())
-    //         checkForMatch(event.crafting);
-    // }
-
-    // These events are double counted when performed by agents
-    // @SubscribeEvent
-    // public void onItemSmelt(PlayerEvent.ItemSmeltedEvent event) {
-    //     if (event.player instanceof EntityPlayerMP && !event.smelting.isEmpty())
-    //         checkForMatch(event.smelting);
-    // }
 
     @SubscribeEvent
     public void onLoseItem(LoseItemEvent event) {
@@ -207,9 +195,8 @@ public class RewardForPossessingItemImplementation extends RewardForItemBase imp
         if (item_stack != null) {
             for (ItemMatcher matcher : this.matchers) {
                 if (matcher.matches(item_stack)) {
-                    System.out.println(String.format("LOGTOPY:%s_%d.%d.%d.%d", item_stack.getUnlocalizedName(), savedCollected, maxCollected, nowCollected, matcher.matchSpec.getAmount()));
                     if (params.isSparse()){
-                        // If sparse rewards and amount collected has been reached we are done with
+                        // If sparse rewards and amount collected has been reached we are done giving rewards for this handler
                         if (maxCollected >= matcher.matchSpec.getAmount())
                             break;
                         // Otherwise if we currently reach the reward threshold send the reward
@@ -222,15 +209,17 @@ public class RewardForPossessingItemImplementation extends RewardForItemBase imp
                             addCachedReward(dimension, adjusted_reward);
                         }
                     } else {
-                        // MAX version
-                        // If we cross the reward threshold and our max has not then we get the points
-                        // int number_threshold_crossings = (int) Math.floor(nowCollected / matcher.matchSpec.getAmount()) - (int) Math.floor(maxCollected / matcher.matchSpec.getAmount());
-
-                        // DENSE version
-                        // If we cross the reward threshold and our max has not then we get the points
-                        int number_threshold_crossings = (int) Math.floor(nowCollected / matcher.matchSpec.getAmount()) - (int) Math.floor(savedCollected / matcher.matchSpec.getAmount());
-
-
+                        int number_threshold_crossings = 0;
+                        if (params.isExcludeLoops()){ 
+                            // MAX based version - prevents reward loops for placing and then breaking an item
+                            // If we cross the reward thresholds that our max has not, then we get points based on the number of new increments crossed
+                            number_threshold_crossings = (int) Math.floor(nowCollected / matcher.matchSpec.getAmount()) - (int) Math.floor(maxCollected / matcher.matchSpec.getAmount());
+                        } else { 
+                            // DENSE version - allows reward loops. Works well for items that cannot be lost and repeatedly gained, e.g. MINECRAFT:LOG
+                            // If we cross the reward threshold with the new change we get points based on the number of increments crossed
+                            number_threshold_crossings = (int) Math.floor(item_stack.getCount() / matcher.matchSpec.getAmount());
+                        }
+                        
                         if (number_threshold_crossings > 0){
                             int dimension = params.getDimension();
                             float adjusted_reward = this.adjustAndDistributeReward(
