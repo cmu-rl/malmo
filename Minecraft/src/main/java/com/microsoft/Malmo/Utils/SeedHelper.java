@@ -107,7 +107,6 @@ public class SeedHelper
         else{
 
             if(nextSeed != null){
-                System.out.println("[LOGTOPY] Setting seed to: " + Long.toString(nextSeed));
                 currentSeed = nextSeed;
                 forceUpdateMinecraftRandoms();
             }
