@@ -77,6 +77,19 @@ public abstract class MixinMinecraftGameloop {
     @Shadow public abstract int getLimitFramerate();
     @Shadow public abstract boolean isFramerateLimitBelowMax();
     private  int numTicksPassed = 0;
+    long lastUpdateTime = -1;
+
+    private static long MIN_TIME_TO_UPDATE = (long)1e9;
+
+    private void checkUpdateDisplay(){
+        long curTime = System.nanoTime();
+        if(lastUpdateTime == -1)
+            lastUpdateTime = curTime;
+        if(curTime - lastUpdateTime > MIN_TIME_TO_UPDATE){
+            this.updateDisplay();
+            lastUpdateTime = curTime;
+        }
+    }
 
     private void runGameLoop() throws IOException
     {
@@ -120,12 +133,18 @@ public abstract class MixinMinecraftGameloop {
             || TimeHelper.SyncManager.shouldFlush()){
             this.mcProfiler.startSection("waitForTick");
 
+            // TimeHelper.SyncManager.debugLog("[Client] Waiting for tick request!");
+
             // Wait for the shouldClientTick to be true!
             while(!TimeHelper.SyncManager.shouldClientTick()) {
+                checkUpdateDisplay();
                 Thread.yield();
             }
             this.mcProfiler.endSection();
             this.mcProfiler.startSection("syncTickEventPre");
+
+
+            // TimeHelper.SyncManager.debugLog("[Client] Starting client tick.");
 
             MinecraftForge.EVENT_BUS.post(new TimeHelper.SyncTickEvent(Phase.START));
             this.mcProfiler.endSection();
@@ -145,6 +164,7 @@ public abstract class MixinMinecraftGameloop {
             this.mcProfiler.startSection("serverTick");
 
             // Wait for the server tick to finish.
+            // TimeHelper.SyncManager.debugLog("[Client] Client tick end. Client Waiting for server to tick!");
             while(!TimeHelper.SyncManager.shouldRenderTick()) {
                 Thread.yield();
             }
@@ -215,17 +235,23 @@ public abstract class MixinMinecraftGameloop {
 
         this.mcProfiler.startSection("root");
         this.updateDisplay();
-
+        lastUpdateTime = System.nanoTime();
         if(
             (TimeHelper.SyncManager.isSynchronous() && 
             TimeHelper.SyncManager.isServerRunning() && 
             TimeHelper.SyncManager.shouldRenderTick() &&
             TimeHelper.SyncManager.isTicking()) || TimeHelper.SyncManager.shouldFlush()){
-            TimeHelper.SyncManager.completeTick();
+            
+            
 
             this.mcProfiler.startSection("syncTickEventPost");
             MinecraftForge.EVENT_BUS.post(new TimeHelper.SyncTickEvent(Phase.END));
             this.mcProfiler.endSection();
+            
+            // TimeHelper.SyncManager.debugLog("[Client] Tick fully complete..");
+                
+            TimeHelper.SyncManager.completeTick();
+
 
         }
         Thread.yield();

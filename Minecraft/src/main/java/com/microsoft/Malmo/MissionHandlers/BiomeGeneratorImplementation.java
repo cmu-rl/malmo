@@ -38,6 +38,7 @@ import com.microsoft.Malmo.MissionHandlerInterfaces.IWorldGenerator;
 import com.microsoft.Malmo.Schemas.BiomeGenerator;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Utils.MapFileHelper;
+import com.microsoft.Malmo.Utils.SeedHelper;
 
 /**
  * Generates a survival world of only the biome specified.
@@ -50,7 +51,6 @@ public class BiomeGeneratorImplementation extends HandlerBase implements IWorldG
 
 	// Register the event with the Forge Bus
 	public BiomeGeneratorImplementation() {
-		MinecraftForge.TERRAIN_GEN_BUS.register(this);
 	}
 
 	/**
@@ -97,13 +97,14 @@ public class BiomeGeneratorImplementation extends HandlerBase implements IWorldG
 		if (params == null || !(params instanceof BiomeGenerator))
 			return false;
 		this.bparams = (BiomeGenerator) params;
+		MinecraftForge.TERRAIN_GEN_BUS.register(this);
 		return true;
 	}
 
 	public static long getWorldSeedFromString() {
 		// This seed logic mirrors the Minecraft code in
 		// GuiCreateWorld.actionPerformed:
-		long seed = (new Random()).nextLong();
+		long seed = (SeedHelper.getRandom()).nextLong();
 		return seed;
 	}
 

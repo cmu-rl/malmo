@@ -329,6 +329,7 @@
         </xs:annotation>
         <xs:all>
             <xs:element ref="ObservationFromRecentCommands" minOccurs="0"/>
+            <xs:element ref="ObservationFromEquippedItem" minOccurs="0"/>
             <xs:element ref="ObservationFromHotBar" minOccurs="0"/>
             <xs:element ref="ObservationFromFullStats" minOccurs="0"/>
             <xs:element ref="ObservationFromFullInventory" minOccurs="0"/>
@@ -348,11 +349,17 @@
             <xs:element ref="DepthProducer" minOccurs="0"/>
             <xs:element ref="LuminanceProducer" minOccurs="0"/>
             <xs:element ref="ColourMapProducer" minOccurs="0"/>
+            
+            <xs:element ref="FileBasedPerformanceProducer" minOccurs="0"/>
 
             <xs:element ref="RewardForTouchingBlockType" minOccurs="0" />
             <xs:element ref="RewardForSendingCommand" minOccurs="0" />
             <xs:element ref="RewardForSendingMatchingChatMessage" minOccurs="0" />
             <xs:element ref="RewardForCollectingItem" minOccurs="0" />
+            <xs:element ref="RewardForCollectingItemQuantity" minOccurs="0" />
+            <xs:element ref="RewardForPossessingItem" minOccurs="0" />
+            <xs:element ref="RewardForCraftingItem" minOccurs="0" />
+            <xs:element ref="RewardForSmeltingItem" minOccurs="0" />
             <xs:element ref="RewardForDiscardingItem" minOccurs="0" />
             <xs:element ref="RewardForReachingPosition" minOccurs="0"/>
             <xs:element ref="RewardForMissionEnd" minOccurs="0"/>
@@ -368,16 +375,24 @@
             <xs:element ref="InventoryCommands" minOccurs="0"/>
             <xs:element ref="ChatCommands" minOccurs="0"/>
             <xs:element ref="SimpleCraftCommands" minOccurs="0"/>
+            <xs:element ref="NearbyCraftCommands" minOccurs="0"/>
+            <xs:element ref="NearbySmeltCommands" minOccurs="0"/>
+            <xs:element ref="PlaceCommands" minOccurs="0"/>
+            <xs:element ref="EquipCommands" minOccurs="0"/>
             <xs:element ref="MissionQuitCommands" minOccurs="0"/>
             <xs:element ref="TurnBasedCommands" minOccurs="0"/>
             <xs:element ref="HumanLevelCommands" minOccurs="0"/>
             <xs:element ref="PauseCommand" minOccurs="0"/>
+            <xs:element ref="CameraCommands" minOccurs="0"/>
             <!-- When adding a new command handler, make sure to update MissionSpec::getListOfCommandHandlers and MissionSpec::getAllowedCommands, and add to TurnBasedApplicableCommandHandlers (below) if appropriate --> 
 
             <xs:element ref="AgentQuitFromTimeUp" minOccurs="0" />
             <xs:element ref="AgentQuitFromReachingPosition" minOccurs="0" />
             <xs:element ref="AgentQuitFromTouchingBlockType" minOccurs="0" />
             <xs:element ref="AgentQuitFromCollectingItem" minOccurs="0" />
+            <xs:element ref="AgentQuitFromPossessingItem" minOccurs="0" />
+            <xs:element ref="AgentQuitFromCraftingItem" minOccurs="0" />
+            <xs:element ref="AgentQuitFromSmeltingItem" minOccurs="0" />
             <xs:element ref="AgentQuitFromReachingCommandQuota" minOccurs="0" />
             <xs:element ref="AgentQuitFromCatchingMob" minOccurs="0" />
         </xs:all>
@@ -446,6 +461,7 @@
                     <xs:element ref="MovingTargetDecorator" />
                     <xs:element ref="BuildBattleDecorator" />
                     <xs:element ref="NavigationDecorator" />
+                    <xs:element ref="RandomizedStartDecorator" />
                 </xs:choice>
                 <xs:choice minOccurs="0" maxOccurs="unbounded">
                     <xs:annotation>

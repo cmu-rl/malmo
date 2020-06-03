@@ -60,6 +60,9 @@ public class TimeHelper
         static Boolean serverRunning = false;
         static Boolean tickCompleted = false;
         static Boolean shouldFlush = false;
+        static Boolean serverPistolFired = false;
+        public static long numTicks = 0;
+        final static Boolean verbose = false;
 
         static Boolean isTicking = false;
 
@@ -73,6 +76,9 @@ public class TimeHelper
         }
         public static synchronized  void setSynchronous(Boolean value){
             if(value == true){
+                if(synchronous == false){
+                    isTicking = false;
+                }
                 synchronous = value;
                 shouldFlush = false;
             }
@@ -83,7 +89,9 @@ public class TimeHelper
         
         public static synchronized Boolean requestTick(){
             // Build a locking system.
-            if ( ! isTicking) {
+            if ( ! isTicking && synchronous) {
+
+                // TimeHelper.SyncManager.debugLog("============ SYNC TICK STARTED ===========");
                 shouldClientTick = true;
                 isTicking = true;
                 clientTickCompleted = false;
@@ -96,6 +104,13 @@ public class TimeHelper
             }
         } 
 
+        public static synchronized void setPistolFired(Boolean hasIt){
+            if(hasIt && !serverPistolFired){
+                // TimeHelper.SyncManager.debugLog("Server pistol has started firing.");
+            }
+            serverPistolFired = hasIt;
+        }   
+
         public static synchronized Boolean shouldClientTick(){
             return shouldClientTick && isTicking || shouldFlush;
         }
@@ -107,6 +122,12 @@ public class TimeHelper
 
         public static synchronized Boolean shouldRenderTick(){
             return isTicking && (serverTickCompleted || !serverRunning) && clientTickCompleted || shouldFlush;
+        }
+
+        public static void debugLog(String logger){
+            if(verbose){
+                System.out.println("SYNCMANAGER DEBUG: " + logger);
+            }
         }
 
 
@@ -149,6 +170,10 @@ public class TimeHelper
 
         public static synchronized Boolean isTickCompleted(){
             return tickCompleted;
+        }
+
+        public static synchronized Boolean hasServerFiredPistol(){
+            return serverPistolFired;
         }
     }
 

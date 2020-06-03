@@ -4,7 +4,7 @@
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 //  associated documentation files (the "Software"), to deal in the Software without restriction,
 //  including without limitation the rights to use, copy, modify, merge, publish, distribute,
-//  sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+//  sublicense, and/or l copies of the Software, and to permit persons to whom the Software is
 //  furnished to do so, subject to the following conditions:
 //
 //  The above copyright notice and this permission notice shall be included in all copies or
@@ -65,16 +65,13 @@ public class MalmoEnvServer implements IWantToQuit {
         int reset = 0;
         boolean quit = false;
         boolean synchronous = false;
+        Long seed = null;
 
         // OpenAI gym state:
         boolean done = false;
         double reward = 0.0;
         byte[] obs = null;
         String info = "";
-
-        // Actions (with optional turn key)
-        String turnKey = "";
-        String lastTurnKey = "";
         LinkedList<String> commands = new LinkedList<String>();
     }
 
@@ -219,11 +216,15 @@ public class MalmoEnvServer implements IWantToQuit {
                                 }
                             }
                         } catch (IOException ioe) {
-                            ioe.printStackTrace();
+                            // ioe.printStackTrace();
                             TCPUtils.Log(Level.SEVERE, "MalmoEnv socket error: " + ioe + " (can be on disconnect)");
+                            // System.out.println("[ERROR] " + "MalmoEnv socket error: " + ioe + " (can be on disconnect)");
+                            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] MalmoEnv socket error");
                             try {
                                 if (running) {
                                     TCPUtils.Log(Level.INFO,"Want to quit on disconnect.");
+
+                                    System.out.println("[LOGTOPY] " + "Want to quit on disconnect.");
                                     setWantToQuit();
                                 }
                                 socket.close();
@@ -270,6 +271,9 @@ public class MalmoEnvServer implements IWantToQuit {
         int reset = Integer.parseInt(token[2]);
         int agentCount = Integer.parseInt(token[3]);
         Boolean isSynchronous = Boolean.parseBoolean(token[4]);
+        Long seed = null;
+        if(token.length > 5)
+            seed = Long.parseLong(token[5]);
 
         if(isSynchronous && agentCount > 1){
             throw new IOException("Synchronous mode currently does not support multiple agents.");
@@ -288,8 +292,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 String myToken = experimentId + ":0:" + reset;
                 if (!initTokens.containsKey(myToken)) {
                     TCPUtils.Log(Level.INFO,"(Pre)Start " + role + " reset " + reset);
-
-                    started = startUp(command, ipOriginator, experimentId, reset, agentCount, myToken, isSynchronous);
+                    started = startUp(command, ipOriginator, experimentId, reset, agentCount, myToken, seed, isSynchronous);
                     if (started)
                         initTokens.put(myToken, 0);
                 } else {
@@ -309,7 +312,7 @@ public class MalmoEnvServer implements IWantToQuit {
             } else {
                 TCPUtils.Log(Level.INFO, "Start " + role + " reset " + reset);
 
-                started = startUp(command, ipOriginator, experimentId, reset, agentCount, experimentId + ":" + role + ":" + reset, isSynchronous);
+                started = startUp(command, ipOriginator, experimentId, reset, agentCount, experimentId + ":" + role + ":" + reset, seed, isSynchronous);
             }
         } finally {
             lock.unlock();
@@ -320,9 +323,6 @@ public class MalmoEnvServer implements IWantToQuit {
         dout.writeInt(allTokensConsumed && started ? 1 : 0);
         dout.flush();
 
-        byte[] turnKey = "".getBytes();
-        dout.writeInt(turnKey.length);
-        dout.write(turnKey);
         dout.flush();
 
         return allTokensConsumed && started;
@@ -340,7 +340,7 @@ public class MalmoEnvServer implements IWantToQuit {
         return allTokensConsumed;
     }
 
-    private boolean startUp(String command, String ipOriginator, String experimentId, int reset, int agentCount, String myToken, Boolean isSynchronous) throws IOException {
+    private boolean startUp(String command, String ipOriginator, String experimentId, int reset, int agentCount, String myToken, Long seed, Boolean isSynchronous) throws IOException {
 
         // Clear out mission state
         envState.reward = 0.0;
@@ -348,18 +348,17 @@ public class MalmoEnvServer implements IWantToQuit {
         envState.obs = null;
         envState.info = "";
 
+
         envState.missionInit = command;
         envState.done = false;
         envState.quit = false;
-        envState.turnKey = "";
-        envState.lastTurnKey = "";
         envState.token = myToken;
         envState.experimentId = experimentId;
         envState.agentCount = agentCount;
         envState.reset = reset;
         envState.synchronous = isSynchronous;
-
-
+        envState.seed = seed;
+        
         return startUpMission(command, ipOriginator);
     }
 
@@ -393,236 +392,77 @@ public class MalmoEnvServer implements IWantToQuit {
     }
 
     private static final int stepTagLength = "<Step_>".length(); // Step with option code.
-
-
-    private void stepAsync(String command, Socket socket, DataInputStream din) throws IOException {
-        /***
-         * Steps asynchronously, this is really not condusive to reinforcement learning fyi.
-         * This will give you the previous state before it gives you the next state...
-         * You submit an action and then you get the previous state, what the fuck.
-         */
-        String actions = command.substring(stepTagLength, command.length() - (stepTagLength + 2));
-        int options =  Character.getNumericValue(command.charAt(stepTagLength - 2));
-        boolean withTurnkey = options < 2;
-        boolean withInfo = options == 0 || options == 2;
-        // TCPUtils.Log(Level.FINE,"Command (step action): " + actionCommand + " options " + options);
-
-        byte[] stepTurnKey;
-        if (withTurnkey) {
-            int hdr;
-            hdr = din.readInt();
-            stepTurnKey = new byte[hdr];
-            din.readFully(stepTurnKey);
-        } else {
-            stepTurnKey = new byte[0];
-        }
-
-        DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
-        double reward = 0.0;
-        boolean done;
-        byte[] obs;
-        String info = "";
-        byte[] currentTurnKey;
-        byte[] nextTurnKey;
-        boolean sent = false;
-
-        lock.lock();
-        try {
-
-            done = envState.done;
-
-            obs = getObservation(done);
-
-            // If done or we have new observation and it's our turn then submit command and pick up rewards.
-
-            currentTurnKey = envState.turnKey.getBytes();
-            boolean outOfTurn = true;
-            nextTurnKey = currentTurnKey;
-
-            if (!done && obs.length > 0 && actions != "") {
-                // CurrentKey   StepKey     Action (WithKey)    nextTurnKey     outOfTurn
-                // ""           ""          Y                   Current         N
-                // ""           X           N                   Step            Y
-                // X            0           N                   Current         Y
-                // X            X           Y (WK)              Current         N
-                // X            Y           N                   Current         Y
-
-                // TCPUtils.Log(Level.FINE, "current TK " + envState.turnKey + " step TK " + new String(stepTurnKey));
-                if (currentTurnKey.length == 0) {
-                    if (stepTurnKey.length == 0) {
-                        if (actions.contains("\n")) {
-                            String[] cmds = actions.split("\\n");
-                            for(String cmd : cmds) {
-                                envState.commands.add(cmd);
-                            }
-                        } else {
-                            if (!actions.isEmpty())
-                                envState.commands.add(actions);
-                        }
-                        outOfTurn = false;
-                        sent = true;
-                    } else {
-                        nextTurnKey = stepTurnKey;
-                    }
-                } else {
-                    if (stepTurnKey.length != 0) {
-                        if (Arrays.equals(currentTurnKey, stepTurnKey)) {
-                            // The step turn key may later still be stale when picked up from the command queue.
-                            envState.commands.add(new String(stepTurnKey) + " " + actions);
-                            outOfTurn = false;
-                            envState.turnKey = "";
-                            envState.lastTurnKey = new String(stepTurnKey);
-                            sent = true;
-                        }
-                    }
-                }
-            }
-
-            if (done || (obs.length > 0 && !outOfTurn)) {
-                // Pick up rewards.
-                reward = envState.reward;
-                envState.reward = 0.0;
-                if (withInfo) {
-                    info = envState.info;
-                    envState.info = "";
-                    if (info.isEmpty() && !done) {
-                        try {
-                            cond.await(COND_WAIT_SECONDS, TimeUnit.SECONDS);
-                        } catch (InterruptedException ie) {
-                        }
-                        info = envState.info;
-                        envState.info = "";
-                        if (envState.obs != null && envState.obs != obs) {
-                            // Later observation.
-                            obs = envState.obs;
-                        }
-                    }
-                }
-                envState.obs = null;
-            }
-        } finally {
-            lock.unlock();
-        }
-
-        dout.writeInt(obs.length);
-        dout.write(obs);
-
-        dout.writeInt(BYTES_DOUBLE + 2);
-        dout.writeDouble(reward);
-        dout.writeByte(done ? 1 : 0);
-        dout.writeByte(sent ? 1 : 0);
-
-        if (withInfo) {
-            byte[] infoBytes = info.getBytes(utf8);
-            dout.writeInt(infoBytes.length);
-            dout.write(infoBytes);
-        }
-
-        if (withTurnkey) {
-            dout.writeInt(nextTurnKey.length);
-            dout.write(nextTurnKey);
-        }
-        dout.flush();
-    }
-
     private synchronized void stepSync(String command, Socket socket, DataInputStream din) throws IOException 
     {
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Entering synchronous step.");
         nsteps += 1;
         profiler.startSection("commandProcessing");
         String actions = command.substring(stepTagLength, command.length() - (stepTagLength + 2));
         int options =  Character.getNumericValue(command.charAt(stepTagLength - 2));
-        boolean withTurnkey = options < 2;
         boolean withInfo = options == 0 || options == 2;
-        // TCPUtils.Log(Level.FINE,"Command (step action): " + actionCommand + " options " + options);
 
-        byte[] stepTurnKey;
-        if (withTurnkey) {
-            int hdr;
-            hdr = din.readInt();
-            stepTurnKey = new byte[hdr];
-            din.readFully(stepTurnKey);
-        } else {
-            stepTurnKey = new byte[0];
-        }
 
+
+        
+        // Prepare to write data to the client.
         DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
         double reward = 0.0;
         boolean done;
         byte[] obs;
         String info = "";
-        byte[] currentTurnKey;
-        byte[] nextTurnKey;
         boolean sent = false;
+
+
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Acquiring lock for synchronous step.");
 
         lock.lock();
         try {
 
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Lock is acquired.");
+
             done = envState.done;
 
-            // If done or we have new observation and it's our turn then submit command and pick up rewards.
+            // TODO Handle when the environment is done.
 
-            currentTurnKey = envState.turnKey.getBytes();
-            boolean outOfTurn = true;
-            nextTurnKey = currentTurnKey;
-
-            if (!done && actions != "") {
-                // CurrentKey   StepKey     Action (WithKey)    nextTurnKey     outOfTurn
-                // ""           ""          Y                   Current         N
-                // ""           X           N                   Step            Y
-                // X            0           N                   Current         Y
-                // X            X           Y (WK)              Current         N
-                // X            Y           N                   Current         Y
-
-                // TCPUtils.Log(Level.FINE, "current TK " + envState.turnKey + " step TK " + new String(stepTurnKey));
-                if (currentTurnKey.length == 0) {
-                    if (stepTurnKey.length == 0) {
-                        if (actions.contains("\n")) {
-                            String[] cmds = actions.split("\\n");
-                            for(String cmd : cmds) {
-                                envState.commands.add(cmd);
-                            }
-                        } else {
-                            if (!actions.isEmpty())
-                                envState.commands.add(actions);
-                        }
-                        outOfTurn = false;
-                        sent = true;
-                    } else {
-                        nextTurnKey = stepTurnKey;
-                    }
-                } else {
-                    if (stepTurnKey.length != 0) {
-                        if (Arrays.equals(currentTurnKey, stepTurnKey)) {
-                            // The step turn key may later still be stale when picked up from the command queue.
-                            envState.commands.add(new String(stepTurnKey) + " " + actions);
-                            outOfTurn = false;
-                            envState.turnKey = "";
-                            envState.lastTurnKey = new String(stepTurnKey);
-                            sent = true;
-                        }
-                    }
+            // Process the actions.
+            if (actions.contains("\n")) {
+                String[] cmds = actions.split("\\n");
+                for(String cmd : cmds) {
+                    envState.commands.add(cmd);
                 }
+            } else {
+                if (!actions.isEmpty())
+                    envState.commands.add(actions);
             }
-
+            sent = true;
             
-
-            lock.unlock();
-            // int _x = 0;
 
 
             profiler.endSection(); //cmd
             profiler.startSection("requestTick");
 
-            // Now wait to run a tick
-            while(!TimeHelper.SyncManager.requestTick() && !done  ){Thread.yield();} 
 
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Received: " + actions);
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Requesting tick.");
+            // Now wait to run a tick
+            // If synchronous mode is off then we should see if want to quit is true.
+            while(!TimeHelper.SyncManager.requestTick() && !done ){Thread.yield();} 
+
+            
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Tick request granted.");
 
             profiler.endSection();
             profiler.startSection("waitForTick");
 
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Waiting for tick.");
+
             // Then wait until the tick is finished
             while(!TimeHelper.SyncManager.isTickCompleted() && !done ){ Thread.yield();}
-            lock.lock();
+
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> TICK DONE.  Getting observation.");
+
 
 
             profiler.endSection();
@@ -631,38 +471,37 @@ public class MalmoEnvServer implements IWantToQuit {
             obs = getObservation(done);
 
 
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Observation received. Getting info.");
+
             profiler.endSection();
             profiler.startSection("getInfo");
             
 
-            if (done || (obs.length > 0 && !outOfTurn)) {
-                // Pick up rewards.
-                reward = envState.reward;
-                envState.reward = 0.0;
-                if (withInfo) {
-                    info = envState.info;
-                    envState.info = "";
-                    if (info.isEmpty() && !done) {
-                        // System.out.println("Waiting for info");
-                        try {
-                            cond.await(COND_WAIT_SECONDS, TimeUnit.SECONDS);
-                        } catch (InterruptedException ie) {
-                        }
-                        info = envState.info;
-                        envState.info = "";
-                        if (envState.obs != null && envState.obs != obs) {
-                            // Later observation.
-                            obs = envState.obs;
-                        }
-                    }
-                }
-                envState.obs = null;
+            // Pick up rewards.
+            reward = envState.reward;
+            if (withInfo) {
+                info = envState.info;
+                // if(info == null)
+                    // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> FILLING INFO: NULL");
+                // else
+                    // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> FILLING " + info.toString());
+                
             }
+            done = envState.done;
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> STATUS " + Boolean.toString(done));
+            envState.info = null;
+            envState.obs = null;
+            envState.reward = 0.0;
+            
+
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Info received..");
             profiler.endSection();
         } finally {
             lock.unlock();
         }
 
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Lock released. Writing observation, info, done.");
         
         profiler.startSection("writeObs");
         dout.writeInt(obs.length);
@@ -679,15 +518,15 @@ public class MalmoEnvServer implements IWantToQuit {
             dout.write(infoBytes);
         }
 
-        if (withTurnkey) {
-            dout.writeInt(nextTurnKey.length);
-            dout.write(nextTurnKey);
-        }
-
         profiler.endSection(); //write obs
         profiler.startSection("flush");
+
+
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Packets written. Flushing.");
         dout.flush();
         profiler.endSection(); // flush
+
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Done with step.");
     }
     // Handler for <Step_> messages. Single digit option code after _ specifies if turnkey and info are included in message.
     private void step(String command, Socket socket, DataInputStream din) throws IOException {
@@ -695,7 +534,7 @@ public class MalmoEnvServer implements IWantToQuit {
             stepSync(command, socket, din);
         }
         else{
-            stepAsync(command, socket, din);
+            System.out.println("[ERROR] Asynchronous stepping is not supported in MineRL.");
         }
         
     }
@@ -709,11 +548,46 @@ public class MalmoEnvServer implements IWantToQuit {
         String info = "";
 
         lock.lock();
+
         try {
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK> Waiting for pistol to fire.");
+            while(!TimeHelper.SyncManager.hasServerFiredPistol()){   
+                
+                    // Now wait to run a tick
+                while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
+
+
+                // Then wait until the tick is finished
+                while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
+            
+                
+                Thread.yield(); 
+            }
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK>  Pistol fired!.");
+            // Wait two ticks for the first observation from server to be propagated.
+            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
+
+            // Then wait until the tick is finished
+            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
+        
+
+
+            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
+
+            // Then wait until the tick is finished
+            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
+        
+
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK> Getting observation.");
+
             obs = getObservation(false);
+
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK> Observation acquired.");
             done = envState.done;
             info = envState.info;
-            envState.info = "";
+           
         } finally {
             lock.unlock();
         }
@@ -732,17 +606,10 @@ public class MalmoEnvServer implements IWantToQuit {
     }
 
     // Get the current observation. If none and not done wait for a short time.
-    private byte[] getObservation(boolean done) {
+    public byte[] getObservation(boolean done)  {
         byte[] obs = envState.obs;
-        if (obs == null && !done && !envState.synchronous){
-            try {
-                cond.await(COND_WAIT_SECONDS, TimeUnit.SECONDS);
-            } catch (InterruptedException ie) {
-            }
-            obs = envState.obs;
-        }
-        if (obs == null) {
-            obs = new byte[0];
+        if (obs == null){
+            System.out.println("[ERROR] Video observation is null; please notify the developer.");
         }
         return obs;
     }
@@ -814,8 +681,20 @@ public class MalmoEnvServer implements IWantToQuit {
     private void quit(String command, Socket socket) throws IOException {
         lock.lock();
         try {
-            if (!envState.done)
+            if (!envState.done){
+                
                 envState.quit = true;
+            }
+
+             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK>  Pistol fired!.");
+            // Wait two ticks for the first observation from server to be propagated.
+            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
+
+            // Then wait until the tick is finished
+            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
+            
+            
+
             DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
             dout.writeInt(BYTES_INT);
             dout.writeInt(envState.done ? 1 : 0);
@@ -861,12 +740,12 @@ public class MalmoEnvServer implements IWantToQuit {
         }
     }
 
-    // Handler for <Exit> messages. These "kill the service" temporarily so use with care!
+    // Handler for <Exit> messages. These "kill the service" temporarily so use with care!f
     private void exit(String command, Socket socket) throws IOException {
-        lock.lock();
+        // lock.lock();
         try {
              // We may exit before we get a chance to reply.
-
+            TimeHelper.SyncManager.setSynchronous(false);
             DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
             dout.writeInt(BYTES_INT);
             dout.writeInt(1);
@@ -875,14 +754,13 @@ public class MalmoEnvServer implements IWantToQuit {
             ClientStateMachine.exitJava();
 
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
     // Malmo client state machine interface methods:
 
     public String getCommand() {
-        lock.lock();
         try {
             String command = envState.commands.poll();
             if (command == null)
@@ -890,18 +768,15 @@ public class MalmoEnvServer implements IWantToQuit {
             else
                 return command;
         } finally {
-            lock.unlock();
         }
     }
 
     public void endMission() {
-        lock.lock();
+        // lock.lock();
         try {
             envState.done = true;
             envState.quit = false;
             envState.missionInit = null;
-            envState.turnKey = "";
-            envState.lastTurnKey = "";
 
             if (envState.token != null) {
                 initTokens.remove(envState.token);
@@ -910,55 +785,41 @@ public class MalmoEnvServer implements IWantToQuit {
                 envState.agentCount = 0;
                 envState.reset = 0;
 
-                cond.signalAll();
+                // cond.signalAll();
             }
+            // lock.unlock();
         } finally {
-            lock.unlock();
         }
     }
-
     // Record a Malmo "observation" json - as the env info since an environment "obs" is a video frame.
     public void observation(String info) {
         // Parsing obs as JSON would be slower but less fragile than extracting the turn_key using string search.
-        String pattern = "\"turn_key\":\"";
-        int i = info.indexOf(pattern);
-        String turnKey = "";
-        if (i != -1) {
-            turnKey = info.substring(i + pattern.length(), info.length() - 1);
-            turnKey = turnKey.substring(0, turnKey.indexOf("\""));
-            // TCPUtils.Log(Level.FINE, "Observation turn key: " + turnKey);
-        }
-        lock.lock();
+        // lock.lock();
         try {
-            if (!envState.turnKey.equals(turnKey)) {
-                // TCPUtils.Log(Level.FINE,"Update TK: [" + turnKey + "][" + turnKey + "]");
-            }
-            if (!envState.lastTurnKey.equals(turnKey)) {
-                envState.turnKey = turnKey;
-            }
+            // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <OBSERVATION> Inserting: " + info);
             envState.info = info;
-            cond.signalAll();
+            // cond.signalAll();
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
     public void addRewards(double rewards) {
-        lock.lock();
+        // lock.lock();
         try {
             envState.reward += rewards;
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
     public void addFrame(byte[] frame) {
-        lock.lock();
+        // lock.lock();
         try {
             envState.obs = frame; // Replaces current.
-            cond.signalAll();
+            // cond.signalAll();
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
@@ -990,16 +851,20 @@ public class MalmoEnvServer implements IWantToQuit {
 
     @Override
     public boolean doIWantToQuit(MissionInit missionInit) {
-        lock.lock();
+        // lock.lock();
         try {
            return envState.quit;
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
+    public Long getSeed(){
+        return envState.seed;
+    }
+
     private void setWantToQuit() {
-        lock.lock();
+        // lock.lock();
         try {
             envState.quit = true;
             
@@ -1009,7 +874,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 // We want to dsynchronize everything.
                 TimeHelper.SyncManager.setSynchronous(false);
             }
-            lock.unlock();
+            // lock.unlock();
         }
     }
 

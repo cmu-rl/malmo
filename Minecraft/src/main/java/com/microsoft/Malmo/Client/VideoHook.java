@@ -307,7 +307,6 @@ public class VideoHook {
                     this.videoProducer.getFrame(this.missionInit, this.buffer);
                     this.buffer.get(data); // Avoiding copy not simple as data is kept & written to a stream later.
                     time_after_render_ns = System.nanoTime();
-
                     envServer.addFrame(data);
                 } else {
                     time_after_render_ns = System.nanoTime();
@@ -342,13 +341,13 @@ public class VideoHook {
                 if (this.timeOfFirstFrame == 0)
                     this.timeOfFirstFrame = this.timeOfLastFrame;
                 this.framesSent++;
-                //            System.out.format("Total: %.2fms; collecting took %.2fms; sending %d bytes took %.2fms\n", ms_send + ms_render, ms_render, size, ms_send);
-                //            System.out.println("Collect: " + ms_render + "; Send: " + ms_send);
             }
         }
         catch (Exception e)
         {
-            System.out.format(e.getMessage());
+            System.out.println(e);
+            e.printStackTrace();
+            // System.out.format(e.getMessage());
         }
         
         if (!success) {

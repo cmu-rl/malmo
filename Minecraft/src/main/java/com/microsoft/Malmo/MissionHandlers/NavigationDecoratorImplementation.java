@@ -25,16 +25,19 @@ import com.microsoft.Malmo.MissionHandlerInterfaces.IWorldDecorator;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Schemas.NavigationDecorator;
 import com.microsoft.Malmo.Utils.MinecraftTypeHelper;
+import com.microsoft.Malmo.Utils.PositionHelper;
+import com.microsoft.Malmo.Utils.SeedHelper;
 
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
 
 /**
  * Creates a decorator that sets a random block and then points all compasses
  * towards the block.
- * 
+ *
  * @author Cayden Codel, Carnegie Mellon University
  *
  */
@@ -56,6 +59,7 @@ public class NavigationDecoratorImplementation extends HandlerBase implements IW
 		return true;
 	}
 
+
 	@Override
 	public void buildOnWorld(MissionInit missionInit, World world) throws DecoratorException {
 		if (nparams.getRandomPlacementProperties().getOrigin() != null)
@@ -73,7 +77,7 @@ public class NavigationDecoratorImplementation extends HandlerBase implements IW
 
 		maxRad = nparams.getRandomPlacementProperties().getMaxRandomizedRadius().doubleValue();
 		minRad = nparams.getRandomPlacementProperties().getMinRandomizedRadius().doubleValue();
-		radius = (int) (Math.random() * (maxRad - minRad) + minRad);
+		radius = (int) (SeedHelper.getRandom().nextDouble() * (maxRad - minRad) + minRad);
 
 		minDist = nparams.getMinRandomizedDistance().doubleValue();
 		maxDist = nparams.getMaxRandomizedDistance().doubleValue();
@@ -81,23 +85,30 @@ public class NavigationDecoratorImplementation extends HandlerBase implements IW
 		placementY = 0;
 		placementZ = 0;
 		if (nparams.getRandomPlacementProperties().getPlacement().equals("surface")) {
-			placementX = ((Math.random() - 0.5) * 2 * radius);
-			placementZ = (Math.random() > 0.5 ? -1 : 1) * Math.sqrt((radius * radius) - (placementX * placementX));
+			placementX = ((SeedHelper.getRandom().nextDouble() - 0.5) * 2 * radius);
+			placementZ = (SeedHelper.getRandom().nextDouble() > 0.5 ? -1 : 1) * Math.sqrt((radius * radius) - (placementX * placementX));
 			// Change center to origin now
 			placementX += originX;
 			placementZ += originZ;
-			placementY = world.getTopSolidOrLiquidBlock(new BlockPos(placementX, 0, placementZ)).getY() - 1;
+			placementY = PositionHelper.getTopSolidOrLiquidBlock(world, new BlockPos(placementX, 0, placementZ)).getY() - 1;
+		} else if (nparams.getRandomPlacementProperties().getPlacement().equals("fixed_surface")) {
+			placementX = ((0.42 - 0.5) * 2 * radius);
+			placementZ = (0.24 > 0.5 ? -1 : 1) * Math.sqrt((radius * radius) - (placementX * placementX));
+			// Change center to origin now
+			placementX += originX;
+			placementZ += originZ;
+			placementY = PositionHelper.getTopSolidOrLiquidBlock(world, new BlockPos(placementX, 0, placementZ)).getY() - 1;
 		} else if (nparams.getRandomPlacementProperties().getPlacement().equals("circle")) {
-			placementX = ((Math.random() - 0.5) * 2 * radius);
+			placementX = ((SeedHelper.getRandom().nextDouble() - 0.5) * 2 * radius);
 			placementY = originY;
-			placementZ = (Math.random() > 0.5 ? -1 : 1) * Math.sqrt((radius * radius) - (placementX * placementX));
+			placementZ = (SeedHelper.getRandom().nextDouble() > 0.5 ? -1 : 1) * Math.sqrt((radius * radius) - (placementX * placementX));
 			// Change center to origin now
 			placementX += originX;
 			placementZ += originZ;
 		} else {
-			placementX = ((Math.random() - 0.5) * 2 * radius);
-			placementY = (Math.random() - 0.5) * 2 * Math.sqrt((radius * radius) - (placementX * placementX));
-			placementZ = (Math.random() > 0.5 ? -1 : 1)
+			placementX = ((SeedHelper.getRandom().nextDouble() - 0.5) * 2 * radius);
+			placementY = (SeedHelper.getRandom().nextDouble() - 0.5) * 2 * Math.sqrt((radius * radius) - (placementX * placementX));
+			placementZ = (SeedHelper.getRandom().nextDouble() > 0.5 ? -1 : 1)
 					* Math.sqrt((radius * radius) - (placementX * placementX) - (placementY * placementY));
 			// Change center to origin now
 			placementX += originX;
@@ -112,8 +123,8 @@ public class NavigationDecoratorImplementation extends HandlerBase implements IW
 		if (nparams.isRandomizeCompassLocation()) {
 			double dist = 0;
 			do {
-				xDel = (Math.random() - 0.5) * 2 * maxDist;
-				zDel = (Math.random() - 0.5) * 2 * maxDist;
+				xDel = (SeedHelper.getRandom().nextDouble() - 0.5) * 2 * maxDist;
+				zDel = (SeedHelper.getRandom().nextDouble() - 0.5) * 2 * maxDist;
 				dist = Math.sqrt(xDel * xDel + zDel * zDel);
 			} while (dist <= maxDist && dist >= minDist);
 		}

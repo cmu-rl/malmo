@@ -22,10 +22,12 @@ package com.microsoft.Malmo.MissionHandlers;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.logging.Logger;
 
 import com.microsoft.Malmo.MissionHandlerInterfaces.IAudioProducer;
 import com.microsoft.Malmo.MissionHandlerInterfaces.ICommandHandler;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IObservationProducer;
+import com.microsoft.Malmo.MissionHandlerInterfaces.IPerformanceProducer;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IRewardProducer;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IVideoProducer;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IWantToQuit;
@@ -35,6 +37,7 @@ import com.microsoft.Malmo.Schemas.AgentHandlers;
 import com.microsoft.Malmo.Schemas.AgentSection;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Schemas.ServerHandlers;
+import com.microsoft.Malmo.Utils.TimeHelper;
 
 /** Holder class for the various MissionHandler interfaces that together define the behaviour of the mission.<br>
  */
@@ -47,6 +50,7 @@ public class MissionBehaviour
     public IRewardProducer rewardProducer = null;
     public IWorldDecorator worldDecorator = null;
     public IWorldGenerator worldGenerator = null;
+    public IPerformanceProducer performanceProducer = null;
     public IWantToQuit quitProducer = null;
 
     private String failedHandlers = "";
@@ -63,9 +67,11 @@ public class MissionBehaviour
     	MissionBehaviour behaviour = new MissionBehaviour();
     	behaviour.initAgent(missionInit);
     	// TODO - can't throw and return a behaviour!!
-    	//if (behaviour.getErrorReport() != null && behaviour.getErrorReport().length() > 0)
-    	//    throw new Exception(behaviour.getErrorReport());
+        if (behaviour.getErrorReport() != null && behaviour.getErrorReport().length() > 0)
+            System.out.println("[ERROR] " + behaviour.getErrorReport());
     	
+        //    throw new Exception(behaviour.getErrorReport());
+        
     	return behaviour;
     }
 
@@ -74,8 +80,8 @@ public class MissionBehaviour
     	MissionBehaviour behaviour = new MissionBehaviour();
     	behaviour.initServer(missionInit);
     	// TODO - can't throw and return a behaviour!!
-    	//if (behaviour.getErrorReport() != null && behaviour.getErrorReport().length() > 0)
-    	//    throw new Exception(behaviour.getErrorReport());
+        if (behaviour.getErrorReport() != null && behaviour.getErrorReport().length() > 0)
+            System.out.println("[ERROR] " + behaviour.getErrorReport());
     	
     	return behaviour;
     }
@@ -94,13 +100,13 @@ public class MissionBehaviour
         this.rewardProducer = null;
         this.worldDecorator = null;
         this.quitProducer = null;
+        this.performanceProducer = null;
     }
 
     private void initAgent(MissionInit missionInit)
     {
         reset();
         AgentHandlers handlerset = missionInit.getMission().getAgentSection().get(missionInit.getClientRole()).getAgentHandlers();
-
         // Instantiate the various handlers:
         for (Object handler : handlerset.getAgentMissionHandlers())
             createAndAddHandler(handler);
@@ -162,6 +168,8 @@ public class MissionBehaviour
             addVideoProducer((IVideoProducer)handler);
         else if (handler instanceof IAudioProducer)
             addAudioProducer((IAudioProducer)handler);
+        else if (handler instanceof IPerformanceProducer)
+            addPerformanceProducer((IPerformanceProducer)handler);
         else if (handler instanceof ICommandHandler)
             addCommandHandler((ICommandHandler)handler);
         else if (handler instanceof IObservationProducer)
@@ -186,6 +194,13 @@ public class MissionBehaviour
             this.videoProducers.add(handler);
     }
     
+    private void addPerformanceProducer(IPerformanceProducer handler){
+        if (this.performanceProducer != null)
+            this.failedHandlers += "Too many audio producers specified - only one allowed at present.\n";
+        else
+            this.performanceProducer = handler;
+    }
+
     private void addAudioProducer(IAudioProducer handler)
     {
         if (this.audioProducer != null)
@@ -348,7 +363,7 @@ public class MissionBehaviour
         {
             if (vp != null && vp instanceof HandlerBase)
                 handlers.add((HandlerBase)vp);
-        }
+        } 
         if (this.audioProducer != null && this.audioProducer instanceof HandlerBase)
             handlers.add((HandlerBase)this.audioProducer);
         if (this.commandHandler != null && this.commandHandler instanceof HandlerBase)
@@ -359,6 +374,8 @@ public class MissionBehaviour
             handlers.add((HandlerBase)this.rewardProducer);
         if (this.quitProducer != null && this.quitProducer instanceof HandlerBase)
             handlers.add((HandlerBase)this.quitProducer);
+        if (this.performanceProducer != null && this.performanceProducer instanceof HandlerBase)
+            handlers.add((HandlerBase)this.performanceProducer);
         return handlers;
     }
 }

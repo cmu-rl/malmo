@@ -1,6 +1,10 @@
 package com.microsoft.Malmo.MissionHandlers;
 
-import java.lang.*;
+
+
+import net.minecraft.util.ResourceLocation;
+
+import javax.annotation.Nullable;
 
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Schemas.RewardForDistanceTraveledToCompassTarget;
@@ -8,8 +12,17 @@ import com.microsoft.Malmo.Schemas.RewardForDistanceTraveledToCompassTarget;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.item.EntityItemFrame;
+import net.minecraft.item.IItemPropertyGetter;
+import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 public class RewardForDistanceTraveledToCompassTargetImplementation extends RewardBase
 {
@@ -29,10 +42,15 @@ public class RewardForDistanceTraveledToCompassTargetImplementation extends Rewa
         this.params = (RewardForDistanceTraveledToCompassTarget)params;
 
         EntityPlayerSP player = Minecraft.getMinecraft().player;
-        prevSpawn = player.world.getSpawnPoint();
-        BlockPos playerLoc = player.getPosition();
-        this.previousDistance = playerLoc.getDistance(prevSpawn.getX(), prevSpawn.getY(), prevSpawn.getZ());
+        if( player != null && player.world != null){
+            prevSpawn = player.world.getSpawnPoint();
+        }
+        else{
+            prevSpawn = new BlockPos(0,0,0);
+        }
 
+
+        this.previousDistance = 0;
         this.totalReward = 0;
         this.positionInitialized = false;
 
@@ -44,14 +62,15 @@ public class RewardForDistanceTraveledToCompassTargetImplementation extends Rewa
     {
         boolean sendReward = false;
 
+
         EntityPlayerSP player = Minecraft.getMinecraft().player;
         BlockPos spawn = player.world.getSpawnPoint();
         Vec3d playerLoc = player.getPositionVector();
         Vec3d spawnPos = new Vec3d(spawn.getX(), spawn.getY(), spawn.getZ());
 
         double currentDistance = playerLoc.distanceTo(spawnPos);
-        float delta = (float)(this.previousDistance - currentDistance);
-
+        float delta = !positionInitialized  ? 0.0f : (float)(this.previousDistance - currentDistance);
+        
         switch (this.params.getDensity()) {
         case MISSION_END:
             this.totalReward += this.params.getRewardPerBlock().floatValue() * delta;
@@ -74,7 +93,10 @@ public class RewardForDistanceTraveledToCompassTargetImplementation extends Rewa
                 this.prevSpawn.getY() != spawn.getY() ||
                 this.prevSpawn.getZ() != spawn.getZ()) {
             this.totalReward = 0;
+        } else{
+            this.positionInitialized = true;
         }
+
 
         this.previousDistance = currentDistance;
         this.prevSpawn = spawn;

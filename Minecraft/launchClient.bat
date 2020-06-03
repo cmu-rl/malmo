@@ -28,7 +28,7 @@ setlocal enableDelayedExpansion
 ::
 :: The order of the definitions is not important.
 ::
-set "options=-port:0 -replaceable: -scorepolicy:0 -env:"
+set "options=-port:0 -replaceable: -scorepolicy:0 -env: -runDir:run  -performanceDir:NONE -seed:NONE"
 
 :: Set the default option values
 for %%O in (%options%) do for /f "tokens=1,* delims=:" %%A in ("%%O") do set "%%A=%%~B"
@@ -78,6 +78,12 @@ echo }
 echo malmoscore {
 echo I:policy=!-scorepolicy!
 echo }
+echo malmoperformance {
+echo  I:outDir=$performanceDir
+echo }
+echo malmoseed {
+echo  I:seed=$seed
+echo }
 if "!-env!"=="true" (
     echo envtype {
     echo B:env=!-env!
@@ -92,9 +98,7 @@ if "!-replaceable!"=="true" (
 
 :launchLoop
 REM finally run Minecraft:
-call gradlew setupDecompWorkspace
-call gradlew build
-call gradlew runClient
+call gradlew runClient --no-daemon -PrunDir="!-runDir!"
 if "!-replaceable!"=="true" (
     goto :launchLoop
 )
