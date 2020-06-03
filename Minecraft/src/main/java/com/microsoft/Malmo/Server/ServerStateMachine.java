@@ -1205,7 +1205,7 @@ public class ServerStateMachine extends StateMachine
                 {
                     long targetTicks = 1000 / TimeHelper.serverTickLength;
                     if (this.tickCount < targetTicks)
-                        System.out.println("Warning: managed " + this.tickCount + "/" + targetTicks + " ticks this second.");
+//                         System.out.println("Warning: managed " + this.tickCount + "/" + targetTicks + " ticks this second.");
                     this.secondStartTimeMs = timeNow;
                     this.tickCount = 0;
                 }

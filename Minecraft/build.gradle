@@ -101,7 +101,7 @@ exec.jvmArgs(["-Dfml.coreMods.load=com.microsoft.Malmo.OverclockingPlugin","-Xmx
 // TCP log files, which gradle won't be able to checksum, meaning that the runClient task will fail
 // if there is already a Minecraft running and logging.
 // To prevent this behaviour, we set the outputs to a dummy value:
-exec.getOutputs().files.setFrom(file("dummy_value"))
+// exec.getOutputs().files.setFrom(file("dummy_value"))
 // We also force the up-to-date check to return false, since the user will ALWAYS want runClient to run.
 exec.getOutputs().upToDateWhen( { return false } )
 
