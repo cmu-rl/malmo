@@ -8,8 +8,8 @@
            jaxb:version="2.1"
            version="0.37">
 
-    <xs:include schemaLocation="Types.xsd"/>
-    <xs:include schemaLocation="Mission.xsd"/>
+  <xs:include schemaLocation="Types.xsd" />
+  <xs:include schemaLocation="Mission.xsd" />
 
     <xs:complexType name="Pos">
         <xs:annotation>
