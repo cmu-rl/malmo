@@ -71,7 +71,6 @@ public class EquipCommandsImplementation extends CommandBase {
     public static class EquipMessageHandler implements IMessageHandler<EquipMessage, IMessage> {
         @Override
         public IMessage onMessage(EquipMessage message, MessageContext ctx) {
-            System.out.println("Equip message recieved");
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
             if (player == null)
                 return null;
@@ -100,8 +99,6 @@ public class EquipCommandsImplementation extends CommandBase {
 
             // Swap current hotbar item with found inventory item (if not the same)
             int hotbarIdx = player.inventory.currentItem;
-            System.out.println("got harbar " + hotbarIdx);
-            System.out.println("got slot " + stackIndex);
 
             ItemStack prevEquip = inv.getStackInSlot(hotbarIdx).copy();
             inv.setInventorySlotContents(hotbarIdx, stackInInventory);
