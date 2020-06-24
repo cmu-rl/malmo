@@ -1187,11 +1187,12 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
         {
             // Get our name from the Mission:
             List<AgentSection> agents = currentMissionInit().getMission().getAgentSection();
+            boolean isPublic = currentMissionInit().getMission().getServerSection().getServerInitialConditions().isLanEnabled();
             //if (agents == null || agents.size() <= currentMissionInit().getClientRole())
             //    throw new Exception("No agent section for us!"); // TODO
             this.agentName = agents.get(currentMissionInit().getClientRole()).getName();
 
-            if (agents.size() > 1 && currentMissionInit().getClientRole() == 0) // Multi-agent mission - make sure the server is open to the LAN:
+            if ((isPublic || agents.size() > 1) && currentMissionInit().getClientRole() == 0) // Multi-agent mission - make sure the server is open to the LAN:
             {
                 MinecraftServerConnection msc = new MinecraftServerConnection();
                 String address = currentMissionInit().getClientAgentConnection().getClientIPAddress();

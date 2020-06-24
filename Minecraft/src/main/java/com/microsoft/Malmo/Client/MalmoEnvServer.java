@@ -174,6 +174,10 @@ public class MalmoEnvServer implements IWantToQuit {
 
                                     find(command, socket);
 
+                                } else if (command.startsWith("<Interact")) {
+
+                                    interact(command, socket);
+
                                 } else if (command.startsWith("<MissionInit")) {
 
                                     if (missionInit(din, command, socket))
@@ -659,6 +663,56 @@ public class MalmoEnvServer implements IWantToQuit {
         dout.flush();
     }
 
+    // Handler for interact (which connects a client to an IP via multiplayer.).
+
+    private final static int interactTagLength = "<Find>".length();
+
+    private void interact(String command, Socket socket) throws IOException {
+
+        Integer port;
+        lock.lock();
+        try {
+            String token = command.substring(findTagLength, command.length() - (findTagLength + 1));
+            TCPUtils.Log(Level.INFO, "Find token? " + token);
+
+            // Purge previous token.
+            String[] tokenSplits = token.split(":");
+            int ip = Integer.parseInt(tokenSplits[0]);
+            int port = Integer.parseInt(tokenSplits[1]);
+
+            String previousToken = experimentId + ":" + role + ":" + (reset - 1);
+            initTokens.remove(previousToken);
+            cond.signalAll();
+
+            // Check for next token. Wait for a short time if not already produced.
+            port = initTokens.get(token);
+            if (port == null) {
+                try {
+                    cond.await(COND_WAIT_SECONDS, TimeUnit.SECONDS);
+                } catch (InterruptedException ie) {
+                }
+                port = initTokens.get(token);
+                if (port == null) {
+                    port = 0;
+                    TCPUtils.Log(Level.INFO,"Role " + role + " reset " + reset + " waiting for token.");
+                }
+            }
+            // Say that we r done.
+            DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
+            dout.writeInt(BYTES_INT);
+            dout.writeInt(1);
+            dout.flush();
+
+        } finally {
+            lock.unlock();
+        }
+
+        DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
+        dout.writeInt(BYTES_INT);
+        dout.writeInt(port);
+        dout.flush();
+    }
+
     public boolean isSynchronous(){
         return envState.synchronous;
     }
@@ -824,7 +878,7 @@ public class MalmoEnvServer implements IWantToQuit {
     }
 
     public void notifyIntegrationServerStarted(int integrationServerPort) {
-        lock.lock();
+        // lock.lock();
         try {
             if (envState.token != null) {
                 TCPUtils.Log(Level.INFO,"Integration server start up - token: " + envState.token);
@@ -834,7 +888,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 TCPUtils.Log(Level.WARNING,"No mission token on integration server start up!");
             }
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 
