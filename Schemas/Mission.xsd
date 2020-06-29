@@ -75,6 +75,14 @@
         </xs:annotation>
         <xs:complexType>
             <xs:sequence>
+                <xs:element name='HumanInteraction' minOccurs="0" maxOccurs="1">
+                    <xs:complexType>
+                        <xs:all>
+                            <xs:element name="Port"  type='xs:string' minOccurs="1" maxOccurs="1" />
+                            <xs:element name="MaxPlayers" type="xs:int" minOccurs="1" maxOccurs="1" default="1" />
+                        </xs:all>
+                    </xs:complexType> 
+                </xs:element>
                 <xs:element ref="ServerInitialConditions" minOccurs="0" maxOccurs="1" />
                 <xs:element ref="ServerHandlers" />
             </xs:sequence>
@@ -154,7 +162,7 @@
             <xs:all>
                 <xs:element ref="Time" minOccurs="0" maxOccurs="1" />
                 <xs:element ref="Weather" minOccurs="0" maxOccurs="1" />
-                <xs:element name='LanEnabled' type='xs:boolean' minOccurs="0" maxOccurs="1" default="false"/>
+    
                 <xs:element name="AllowSpawning" type="xs:boolean" minOccurs="0" maxOccurs="1" default="false">
                   <xs:annotation>
                     <xs:documentation>

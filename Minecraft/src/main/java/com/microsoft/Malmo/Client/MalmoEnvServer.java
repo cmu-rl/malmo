@@ -24,6 +24,8 @@ import com.microsoft.Malmo.MissionHandlerInterfaces.IWantToQuit;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Utils.TCPUtils;
 
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.profiler.Profiler;
 import com.microsoft.Malmo.Utils.TimeHelper;
 
@@ -665,51 +667,39 @@ public class MalmoEnvServer implements IWantToQuit {
 
     // Handler for interact (which connects a client to an IP via multiplayer.).
 
-    private final static int interactTagLength = "<Find>".length();
+    private final static int interactTagLength = "<Interact>".length();
 
     private void interact(String command, Socket socket) throws IOException {
 
-        Integer port;
         lock.lock();
         try {
-            String token = command.substring(findTagLength, command.length() - (findTagLength + 1));
+            String token = command.substring(interactTagLength, command.length() - (interactTagLength + 1));
             TCPUtils.Log(Level.INFO, "Find token? " + token);
 
             // Purge previous token.
             String[] tokenSplits = token.split(":");
-            int ip = Integer.parseInt(tokenSplits[0]);
-            int port = Integer.parseInt(tokenSplits[1]);
-
-            String previousToken = experimentId + ":" + role + ":" + (reset - 1);
-            initTokens.remove(previousToken);
-            cond.signalAll();
-
-            // Check for next token. Wait for a short time if not already produced.
-            port = initTokens.get(token);
-            if (port == null) {
-                try {
-                    cond.await(COND_WAIT_SECONDS, TimeUnit.SECONDS);
-                } catch (InterruptedException ie) {
+            String ip = tokenSplits[0];
+            String port = tokenSplits[1];
+            //Print the ip and port
+            final ServerData sd = new ServerData("agent server", ip + ":" + port, false);
+            net.minecraftforge.fml.client.FMLClientHandler.instance().getClient().addScheduledTask(new Runnable() {
+                public void run() {
+                    GuiScreen old_gui = net.minecraftforge.fml.client.FMLClientHandler.instance().getClient().currentScreen;
+                    net.minecraftforge.fml.client.FMLClientHandler.instance().setupServerList();
+                    net.minecraftforge.fml.client.FMLClientHandler.instance().connectToServer(old_gui, sd);
                 }
-                port = initTokens.get(token);
-                if (port == null) {
-                    port = 0;
-                    TCPUtils.Log(Level.INFO,"Role " + role + " reset " + reset + " waiting for token.");
-                }
-            }
-            // Say that we r done.
-            DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
-            dout.writeInt(BYTES_INT);
-            dout.writeInt(1);
-            dout.flush();
+            });
+           
+
+            
 
         } finally {
             lock.unlock();
         }
-
+        // Say that we r done.
         DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
         dout.writeInt(BYTES_INT);
-        dout.writeInt(port);
+        dout.writeInt(1);
         dout.flush();
     }
 
