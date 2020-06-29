@@ -24,6 +24,8 @@ import com.microsoft.Malmo.MissionHandlerInterfaces.IWantToQuit;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Utils.TCPUtils;
 
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.profiler.Profiler;
 import com.microsoft.Malmo.Utils.TimeHelper;
 
@@ -173,6 +175,10 @@ public class MalmoEnvServer implements IWantToQuit {
                                 } else if (command.startsWith("<Find")) {
 
                                     find(command, socket);
+
+                                } else if (command.startsWith("<Interact")) {
+
+                                    interact(command, socket);
 
                                 } else if (command.startsWith("<MissionInit")) {
 
@@ -659,6 +665,44 @@ public class MalmoEnvServer implements IWantToQuit {
         dout.flush();
     }
 
+    // Handler for interact (which connects a client to an IP via multiplayer.).
+
+    private final static int interactTagLength = "<Interact>".length();
+
+    private void interact(String command, Socket socket) throws IOException {
+
+        lock.lock();
+        try {
+            String token = command.substring(interactTagLength, command.length() - (interactTagLength + 1));
+            TCPUtils.Log(Level.INFO, "Find token? " + token);
+
+            // Purge previous token.
+            String[] tokenSplits = token.split(":");
+            String ip = tokenSplits[0];
+            String port = tokenSplits[1];
+            //Print the ip and port
+            final ServerData sd = new ServerData("agent server", ip + ":" + port, false);
+            net.minecraftforge.fml.client.FMLClientHandler.instance().getClient().addScheduledTask(new Runnable() {
+                public void run() {
+                    GuiScreen old_gui = net.minecraftforge.fml.client.FMLClientHandler.instance().getClient().currentScreen;
+                    net.minecraftforge.fml.client.FMLClientHandler.instance().setupServerList();
+                    net.minecraftforge.fml.client.FMLClientHandler.instance().connectToServer(old_gui, sd);
+                }
+            });
+           
+
+            
+
+        } finally {
+            lock.unlock();
+        }
+        // Say that we r done.
+        DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
+        dout.writeInt(BYTES_INT);
+        dout.writeInt(1);
+        dout.flush();
+    }
+
     public boolean isSynchronous(){
         return envState.synchronous;
     }
@@ -824,7 +868,7 @@ public class MalmoEnvServer implements IWantToQuit {
     }
 
     public void notifyIntegrationServerStarted(int integrationServerPort) {
-        lock.lock();
+        // lock.lock();
         try {
             if (envState.token != null) {
                 TCPUtils.Log(Level.INFO,"Integration server start up - token: " + envState.token);
@@ -834,7 +878,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 TCPUtils.Log(Level.WARNING,"No mission token on integration server start up!");
             }
         } finally {
-            lock.unlock();
+            // lock.unlock();
         }
     }
 

@@ -23,6 +23,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,6 +42,7 @@ import net.minecraft.client.gui.GuiDisconnected;
 import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraft.client.gui.GuiMainMenu;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.multiplayer.ThreadLanServerPing;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.settings.GameSettings;
@@ -90,6 +92,7 @@ import com.microsoft.Malmo.Schemas.MissionEnded;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Schemas.MissionResult;
 import com.microsoft.Malmo.Schemas.Reward;
+import com.microsoft.Malmo.Schemas.ServerSection.HumanInteraction;
 import com.microsoft.Malmo.Schemas.ModSettings;
 import com.microsoft.Malmo.Schemas.PosAndDirection;
 import com.microsoft.Malmo.Utils.AddressHelper;
@@ -1186,20 +1189,48 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
         protected void handleLan()
         {
             // Get our name from the Mission:
-            List<AgentSection> agents = currentMissionInit().getMission().getAgentSection();
+            final List<AgentSection> agents = currentMissionInit().getMission().getAgentSection();
+            final HumanInteraction hc = currentMissionInit().getMission().getServerSection().getHumanInteraction();
             //if (agents == null || agents.size() <= currentMissionInit().getClientRole())
             //    throw new Exception("No agent section for us!"); // TODO
             this.agentName = agents.get(currentMissionInit().getClientRole()).getName();
 
-            if (agents.size() > 1 && currentMissionInit().getClientRole() == 0) // Multi-agent mission - make sure the server is open to the LAN:
+            if ((hc != null || agents.size() > 1) && currentMissionInit().getClientRole() == 0) // Multi-agent mission - make sure the server is open to the LAN:
             {
-                MinecraftServerConnection msc = new MinecraftServerConnection();
-                String address = currentMissionInit().getClientAgentConnection().getClientIPAddress();
+                final MinecraftServerConnection msc = new MinecraftServerConnection();
+                final String address = currentMissionInit().getClientAgentConnection().getClientIPAddress();
                 // Do we need to open to LAN?
                 if (Minecraft.getMinecraft().isSingleplayer() && !Minecraft.getMinecraft().getIntegratedServer().getPublic())
                 {
-                    String portstr = Minecraft.getMinecraft().getIntegratedServer().shareToLAN(GameType.SURVIVAL, true); // Set to true to stop spam kicks.
-                    ClientStateMachine.this.integratedServerPort = Integer.valueOf(portstr);
+                    String portStr = "";
+                    if (hc == null)
+                        portStr = Minecraft.getMinecraft().getIntegratedServer().shareToLAN(GameType.SURVIVAL, true); // Set to true to stop spam kicks.
+                    else{
+                        try
+                        {
+                            // 1.11.2 - start our own server on a SPECIFIC port.
+                            final IntegratedServer serv = Minecraft.getMinecraft().getIntegratedServer();
+                            final Integer i = Integer.parseInt(hc.getPort());
+                            serv.getNetworkSystem().addLanEndpoint((InetAddress)null, i);
+                            serv.isPublic = true;
+                            serv.lanServerPing = new ThreadLanServerPing(serv.getMOTD(), i + "");
+                            serv.lanServerPing.start();
+                            serv.getPlayerList().setGameType(GameType.SURVIVAL);
+                            serv.getPlayerList().setCommandsAllowedForAll(true);
+                            serv.mc.player.setPermissionLevel(true ? 4 : 0);
+                            
+                            serv.getPlayerList().maxPlayers = hc.getMaxPlayers() + 1; //TODO: for multi-agent add more.
+                            portStr = i + "";
+
+                        } catch (final IOException var6)
+                        {
+                            System.out.println("[ERROR] Could not make MineRL agent server public on port" + hc.getPort() + ".");
+                            synchronized(this.errorFlag){
+                                this.errorFlag = true;
+                            }
+                        }
+                    }
+                    ClientStateMachine.this.integratedServerPort = Integer.valueOf(portStr);
                 }
 
                 TCPUtils.Log(Level.INFO,"Integrated server port: " + ClientStateMachine.this.integratedServerPort);
