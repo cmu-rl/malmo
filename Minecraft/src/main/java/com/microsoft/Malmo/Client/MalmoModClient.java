@@ -36,6 +36,7 @@ import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 
 public class MalmoModClient
 {
+    
     public interface MouseEventListener
     {
         public void onXYZChange(int deltaX, int deltaY, int deltaZ);
