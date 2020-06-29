@@ -20,10 +20,12 @@
 package com.microsoft.Malmo.Client;
 
 import com.microsoft.Malmo.MalmoMod;
+import com.microsoft.Malmo.Client.MalmoModClient.InputType;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IWantToQuit;
 import com.microsoft.Malmo.Schemas.MissionInit;
 import com.microsoft.Malmo.Utils.TCPUtils;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.profiler.Profiler;
@@ -99,16 +101,18 @@ public class MalmoEnvServer implements IWantToQuit {
     private int port;
     private TCPInputPoller missionPoller; // Used for command parsing and not actual communication.
     private String version;
+    private MalmoModClient inputController;
 
     /***
      * Malmo "Env" service.
      * @param port the port the service listens on.
      * @param missionPoller for plugging into existing comms handling.
      */
-    public MalmoEnvServer(String version, int port, TCPInputPoller missionPoller) {
+    public MalmoEnvServer(String version, int port, TCPInputPoller missionPoller, MalmoModClient inputController) {
         this.version = version;
         this.missionPoller = missionPoller;
         this.port = port;
+        this.inputController = inputController;
     }
 
     /** Initialize malmo env configuration. For now either on or "legacy" AgentHost protocol.*/
@@ -689,9 +693,13 @@ public class MalmoEnvServer implements IWantToQuit {
                     net.minecraftforge.fml.client.FMLClientHandler.instance().connectToServer(old_gui, sd);
                 }
             });
-           
-
             
+            // Bad menu behaviour
+            // this.inputController.setInputType(InputType.HUMAN);
+            Minecraft.getMinecraft().mouseHelper = this.inputController.originalMouseHelper;
+            System.setProperty("fml.noGrab", "false");
+            // Minecraft.getMinecraft().mouseHelper.grabMouseCursor();
+           
 
         } finally {
             lock.unlock();
