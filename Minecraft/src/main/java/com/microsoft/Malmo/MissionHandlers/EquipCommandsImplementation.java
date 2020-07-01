@@ -71,7 +71,6 @@ public class EquipCommandsImplementation extends CommandBase {
     public static class EquipMessageHandler implements IMessageHandler<EquipMessage, IMessage> {
         @Override
         public IMessage onMessage(EquipMessage message, MessageContext ctx) {
-            System.out.println("Equip message recieved");
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
             if (player == null)
                 return null;
