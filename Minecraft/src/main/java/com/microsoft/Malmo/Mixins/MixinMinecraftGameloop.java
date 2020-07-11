@@ -153,6 +153,9 @@ public abstract class MixinMinecraftGameloop {
 
             if(TimeHelper.SyncManager.shouldClientTick()){
                 this.runTick();
+                // TODO (R): Implement proper frameskipping. With server alternation.
+                // for (int subtick = 0; subtick < TimeHelper.frameSkip; subtick++)
+                //     this.runTick();
 
                 TimeHelper.SyncManager.completeClientTick();
             } 
@@ -189,9 +192,13 @@ public abstract class MixinMinecraftGameloop {
         // this.mcProfiler.endSection();
         this.mcProfiler.endSection();
         this.mcProfiler.startSection("render");
-        GlStateManager.pushMatrix();
-        GlStateManager.clear(16640);
-        this.framebufferMc.bindFramebuffer(true);
+
+        //Speeds up rendering; though it feels necessary. s
+        if(!TimeHelper.SyncManager.isSynchronous()){
+            GlStateManager.pushMatrix();
+            GlStateManager.clear(16640);
+            this.framebufferMc.bindFramebuffer(true);
+        }
         this.mcProfiler.startSection("display");
         GlStateManager.enableTexture2D();
         this.mcProfiler.endSection(); //display
@@ -223,15 +230,19 @@ public abstract class MixinMinecraftGameloop {
             this.prevFrameTime = System.nanoTime();
         }
 
-        this.guiAchievement.updateAchievementWindow();
-        this.framebufferMc.unbindFramebuffer();
-        GlStateManager.popMatrix();
-        GlStateManager.pushMatrix();
-        this.framebufferMc.framebufferRender(this.displayWidth, this.displayHeight);
-        GlStateManager.popMatrix();
-        GlStateManager.pushMatrix();
-        this.entityRenderer.renderStreamIndicator(this.timer.renderPartialTicks);
-        GlStateManager.popMatrix();
+        // Speeds up rendering!
+        if(!TimeHelper.SyncManager.isSynchronous()){
+            // TODO: IF WE WANT TO ENABE AGENT GUI WE SHOULD LET THIS CODE RUN
+            this.guiAchievement.updateAchievementWindow();
+            this.framebufferMc.unbindFramebuffer();
+            GlStateManager.popMatrix();
+            GlStateManager.pushMatrix();
+            this.framebufferMc.framebufferRender(this.displayWidth, this.displayHeight);
+            GlStateManager.popMatrix();
+            GlStateManager.pushMatrix();
+            this.entityRenderer.renderStreamIndicator(this.timer.renderPartialTicks);
+            GlStateManager.popMatrix();
+        }
 
         this.mcProfiler.startSection("root");
         this.updateDisplay();
@@ -278,7 +289,7 @@ public abstract class MixinMinecraftGameloop {
             }
         }
 
-        if (this.isFramerateLimitBelowMax())
+        if (this.isFramerateLimitBelowMax() && !TimeHelper.SyncManager.isSynchronous())
         {
             this.mcProfiler.startSection("fpslimit_wait");
             Display.sync(this.getLimitFramerate());

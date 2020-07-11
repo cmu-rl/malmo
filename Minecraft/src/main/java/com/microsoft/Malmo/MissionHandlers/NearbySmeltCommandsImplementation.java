@@ -27,6 +27,17 @@ import net.minecraft.block.BlockFurnace;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
+import java.util.Map;
+
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockFurnace;
+import net.minecraft.client.Minecraft;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.init.Blocks;
+import net.minecraft.init.Items;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.FurnaceRecipes;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.common.MinecraftForge;
@@ -129,7 +140,7 @@ public class NearbySmeltCommandsImplementation extends CommandBase {
             }
 
             if (closeFurnace) {
-                ItemStack input = CraftingHelper.getSmeltingRecipeForRequestedOutput(message.parameters);
+                ItemStack input = CraftingHelper.getSmeltingRecipeForRequestedOutput(message.parameters, player);
                 if (input != null)
                     if (CraftingHelper.attemptSmelting(player, input))
                         return null;
@@ -138,6 +149,8 @@ public class NearbySmeltCommandsImplementation extends CommandBase {
             return null;
         }
     }
+
+
 
     @Override
     protected boolean onExecute(String verb, String parameter, MissionInit missionInit) {

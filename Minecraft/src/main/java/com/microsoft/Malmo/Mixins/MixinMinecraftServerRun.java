@@ -110,6 +110,9 @@ public abstract class MixinMinecraftServerRun  {
 
                                 // TimeHelper.SyncManager.debugLog("[SERVER] tick start." +Long.toString(SyncManager.numTicks));
                                 this.tick();
+                                // TODO: Implement propper java frameskipping.
+                                // for (int subtick = 0; subtick < TimeHelper.frameSkip; subtick++)
+                                //     this.tick();
                                 // TimeHelper.SyncManager.debugLog("[SERVER] tick end." +Long.toString(SyncManager.numTicks));
                                 TimeHelper.SyncManager.numTicks += 1;
                                 TimeHelper.SyncManager.completeServerTick();

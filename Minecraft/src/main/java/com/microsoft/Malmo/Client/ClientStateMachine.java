@@ -36,6 +36,7 @@ import java.util.logging.Level;
 import javax.xml.bind.JAXBException;
 import javax.xml.stream.XMLStreamException;
 
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.GuiDisconnected;
@@ -48,6 +49,11 @@ import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.init.Blocks;
+import net.minecraft.init.Items;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.FurnaceRecipes;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.server.integrated.IntegratedServer;
@@ -477,8 +483,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
             @Override
             public boolean onCommand(String command, String ipFrom, DataOutputStream dos)
             {
-                System.out.println("Received from " + ipFrom + ":" +
-                                    command.substring(0, Math.min(command.length(), 1024)));
+                System.out.println("Received from " + ipFrom + ":" + command);
                 boolean keepProcessing = false;
 
                 // Possible commands:
@@ -997,11 +1002,6 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
             List<AgentSection> agents = currentMissionInit().getMission().getAgentSection();
             String agentName = agents.get(currentMissionInit().getClientRole()).getName();
             AuthenticationHelper.setPlayerName(Minecraft.getMinecraft().getSession(), agentName);
-            // If the player's profile properties are empty, MC will keep pinging the Minecraft session service
-            // to fill them, resulting in multiple http requests and grumpy responses from the server
-            // (see https://github.com/Microsoft/malmo/issues/568).
-            // To prevent this, we add a dummy property.
-            Minecraft.getMinecraft().getProfileProperties().put("dummy", new Property("dummy", "property"));
             // Handlers and poller created successfully; proceed to next stage of loading.
             // We will either need to connect to an existing server, or to start
             // a new integrated server ourselves, depending on our role.
@@ -1883,18 +1883,41 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
 
             // Overclocking:
             ModSettings modsettings = currentMissionInit().getMission().getModSettings();
-            if (modsettings != null && modsettings.getMsPerTick() != null)
-                TimeHelper.setMinecraftClientClockSpeed(1000 / modsettings.getMsPerTick());
-            if (modsettings != null && modsettings.isPrioritiseOffscreenRendering() == Boolean.TRUE)
-                TimeHelper.displayGranularityMs = 1000;
+            if (modsettings != null) {
+                if (modsettings.getMsPerTick() != null)
+                    TimeHelper.setMinecraftClientClockSpeed(1000 / modsettings.getMsPerTick());
+                if (modsettings.isPrioritiseOffscreenRendering() == Boolean.TRUE)
+                    TimeHelper.displayGranularityMs = 1000;
+                if (modsettings.getFrameSkip() != null)
+                    TimeHelper.frameSkip = modsettings.getFrameSkip();
+            }
             TimeHelper.unpause();
-            
+
+
+            // smelting recipes with regular coal (standard recipes produce coal with damage
+            // 1 - unclear why
+            removeSmeltingRecipe(Blocks.LOG);
+            removeSmeltingRecipe(Blocks.LOG2);
+            // TODO: Move this somewhere else. This is the wrong place.
+            FurnaceRecipes.instance().addSmeltingRecipeForBlock(Blocks.LOG, new ItemStack(Items.COAL), 0.15F);
+            FurnaceRecipes.instance().addSmeltingRecipeForBlock(Blocks.LOG2, new ItemStack(Items.COAL), 0.15F);
+
             // Synchronization
             if (envServer != null){
                 if(!envServer.doIWantToQuit(currentMissionInit())){
                     TimeHelper.SyncManager.setSynchronous(envServer.isSynchronous());
                 } else {
                     TimeHelper.SyncManager.setSynchronous(false);
+                }
+            }
+        }
+
+        private void removeSmeltingRecipe(Block block) {
+            Item keyToRemove = Item.getItemFromBlock(block);
+            for (Map.Entry<ItemStack, ItemStack> e : FurnaceRecipes.instance().getSmeltingList().entrySet()) {
+                if (keyToRemove.unlocalizedName.equals(e.getKey().getItem().unlocalizedName)) {
+                    FurnaceRecipes.instance().getSmeltingList().remove(e.getKey());
+                    break;
                 }
             }
         }

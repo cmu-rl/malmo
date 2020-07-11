@@ -24,11 +24,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.microsoft.Malmo.MissionHandlers.RewardForCollectingItemImplementation;
@@ -43,27 +48,36 @@ import net.minecraft.block.properties.PropertyEnum;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.creativetab.CreativeTabs;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.creativetab.CreativeTabs;
+import net.minecraft.entity.item.EntityXPOrb;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.InventoryCrafting;
-import net.minecraft.item.EnumRarity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
-import net.minecraft.item.ItemStack;
+import net.minecraft.inventory.SlotCrafting;
+import net.minecraft.item.*;
 import net.minecraft.item.crafting.*;
+import net.minecraft.stats.AchievementList;
 import net.minecraft.tileentity.TileEntityFurnace;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.MathHelper;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.brewing.BrewingRecipeRegistry;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.oredict.ShapedOreRecipe;
 import net.minecraftforge.oredict.ShapelessOreRecipe;
+import scala.actors.threadpool.Arrays;
 
 public class CraftingHelper {
     private static Map<EntityPlayerMP, Integer> fuelCaches = new HashMap<EntityPlayerMP, Integer>();
-
+    private static final int smeltingCookingTime = new TileEntityFurnace().getCookTime(null); // same for all items, apparently
     /**
      * Reset caches<br>
      * Needed to make sure the player starts with a fresh fuel stash.
@@ -79,11 +93,11 @@ public class CraftingHelper {
      * @param recipe the IRecipe to dissect.
      * @return a list of ItemStacks, amalgamated so that all items of the same type are placed in the same stack.
      */
-    public static List<ItemStack> getIngredients(IRecipe recipe) {
+    public static NonNullList<ItemStack> getIngredients(IRecipe recipe) {
         // IRecipe helpfully has no method for inspecting the raw ingredients, so we need to do different things depending on the subclass.
-        List<ItemStack> ingredients = new ArrayList<ItemStack>();
+        NonNullList<ItemStack> ingredients = NonNullList.create();
         if (recipe instanceof ShapelessRecipes) {
-            List<?> items = (List<?>) ((ShapelessRecipes) recipe).recipeItems;
+            List<?> items = ((ShapelessRecipes) recipe).recipeItems;
             for (Object obj : items) {
                 if (obj instanceof ItemStack)
                     ingredients.add((ItemStack) obj);
@@ -104,20 +118,19 @@ public class CraftingHelper {
                 }
             }
         } else if (recipe instanceof ShapedRecipes) {
-            ItemStack[] stack = ((ShapedRecipes) recipe).recipeItems;
-            for (int i = 0; i < stack.length; i++) {
-                if (stack[i] != null)
-                    ingredients.add(stack[i]);
+            ItemStack[] recipeItems = ((ShapedRecipes) recipe).recipeItems;
+            for (ItemStack itemStack : recipeItems) {
+                if (itemStack != null)
+                    ingredients.add(itemStack);
             }
         } else if (recipe instanceof ShapedOreRecipe) {
             Object[] items = ((ShapedOreRecipe) recipe).getInput();
-            for (int i = 0; i < items.length; i++) {
-                Object obj = items[i];
+            for (Object obj : items) {
                 if (obj != null) {
                     if (obj instanceof ItemStack)
                         ingredients.add((ItemStack) obj);
                     else if (obj instanceof List) {
-                        List<?> stacks = (List<?>) items[i];
+                        List<?> stacks = (List<?>) obj;
                         for (Object stack : stacks) {
                             if (stack instanceof ItemStack)
                                 ingredients.add((ItemStack) stack);
@@ -126,7 +139,8 @@ public class CraftingHelper {
                 }
             }
         } else {
-            return null;
+            // TODO Implement remaining recipe types after incorporating item metadata (e.g. potions for tipped arrows)
+            return ingredients;
         }
         return consolidateItemStacks(ingredients);
     }
@@ -137,9 +151,9 @@ public class CraftingHelper {
      * @param inputStacks a list of ItemStacks
      * @return a list of ItemStacks, where all items of the same type are grouped into one stack.
      */
-    public static List<ItemStack> consolidateItemStacks(List<ItemStack> inputStacks) {
+    public static NonNullList<ItemStack> consolidateItemStacks(NonNullList<ItemStack> inputStacks) {
         // Horrible n^2 method - we should do something nicer if this ever becomes a bottleneck.
-        List<ItemStack> outputStacks = new ArrayList<ItemStack>();
+        NonNullList<ItemStack> outputStacks = NonNullList.create();
         for (ItemStack sourceIS : inputStacks) {
             boolean bFound = false;
             for (ItemStack destIS : outputStacks) {
@@ -148,8 +162,10 @@ public class CraftingHelper {
                     destIS.setCount(destIS.getCount() + sourceIS.getCount());
                 }
             }
-            if (!bFound)
+            if (!bFound) {
+                assert sourceIS != null;
                 outputStacks.add(sourceIS.copy());
+            }
         }
         return outputStacks;
     }
@@ -372,16 +388,87 @@ public class CraftingHelper {
      * @param output The output of the furnace burn
      * @return an ItemStack representing the required input.
      */
-    public static ItemStack getSmeltingRecipeForRequestedOutput(String output) {
+    public static ItemStack getSmeltingRecipeForRequestedOutput(String output, EntityPlayerMP player) {
         ItemStack target = MinecraftTypeHelper.getItemStackFromParameterString(output);
-        Iterator<?> furnaceIt = FurnaceRecipes.instance().getSmeltingList().keySet().iterator();
-        while (furnaceIt.hasNext()) {
-            ItemStack isInput = (ItemStack) furnaceIt.next();
-            ItemStack isOutput = FurnaceRecipes.instance().getSmeltingList().get(isInput);
-            if (itemStackIngredientsMatch(target, isOutput))
-                return isInput;
+        if (target == null)
+            return null;
+        for (Map.Entry<ItemStack, ItemStack> e : FurnaceRecipes.instance().getSmeltingList().entrySet()) {
+            if (itemStackIngredientsMatch(target, e.getValue())
+                    && playerHasIngredients(player, Collections.singletonList(e.getKey()))
+                    && totalBurnTimeInInventory(player) >= smeltingCookingTime
+                    ) {
+                return e.getKey();
+            }
         }
         return null;
+    }
+
+    /**
+     * This code is copied from SlotCrafting.onCrafting
+     * TODO - convert this into a mixin to avoid duplicating code
+     * @param player - player crafting the items
+     * @param stack - item and quantity that was crafted
+     * @param craftMatrix - the InventoryCrafting representing the item recipe
+     */
+    protected static void onCrafting(EntityPlayer player, ItemStack stack, InventoryCrafting craftMatrix)
+    {
+        // Unclear why you would get achievements without crafting a non-zero amount of an item but this is behavior
+        // directly from MC
+        if (stack.getCount() > 0)
+        {
+            stack.onCrafting(player.world, player, stack.getCount());
+            net.minecraftforge.fml.common.FMLCommonHandler.instance().firePlayerCraftingEvent(player, stack, craftMatrix);
+        }
+
+        if (stack.getItem() == Item.getItemFromBlock(Blocks.CRAFTING_TABLE))
+        {
+            player.addStat(AchievementList.BUILD_WORK_BENCH);
+        }
+
+        if (stack.getItem() instanceof ItemPickaxe)
+        {
+            player.addStat(AchievementList.BUILD_PICKAXE);
+        }
+
+        if (stack.getItem() == Item.getItemFromBlock(Blocks.FURNACE))
+        {
+            player.addStat(AchievementList.BUILD_FURNACE);
+        }
+
+        if (stack.getItem() instanceof ItemHoe)
+        {
+            player.addStat(AchievementList.BUILD_HOE);
+        }
+
+        if (stack.getItem() == Items.BREAD)
+        {
+            player.addStat(AchievementList.MAKE_BREAD);
+        }
+
+        if (stack.getItem() == Items.CAKE)
+        {
+            player.addStat(AchievementList.BAKE_CAKE);
+        }
+
+        if (stack.getItem() instanceof ItemPickaxe && ((ItemPickaxe)stack.getItem()).getToolMaterial() != Item.ToolMaterial.WOOD)
+        {
+            player.addStat(AchievementList.BUILD_BETTER_PICKAXE);
+        }
+
+        if (stack.getItem() instanceof ItemSword)
+        {
+            player.addStat(AchievementList.BUILD_SWORD);
+        }
+
+        if (stack.getItem() == Item.getItemFromBlock(Blocks.ENCHANTING_TABLE))
+        {
+            player.addStat(AchievementList.ENCHANTMENTS);
+        }
+
+        if (stack.getItem() == Item.getItemFromBlock(Blocks.BOOKSHELF))
+        {
+            player.addStat(AchievementList.BOOKCASE);
+        }
     }
 
     /**
@@ -425,7 +512,7 @@ public class CraftingHelper {
                     for (int i = 0; i < shapedRecipe.recipeItems.length; i++)
                         craftMatrix.setInventorySlotContents(i, shapedRecipe.recipeItems[i]);
 
-                    MinecraftForge.EVENT_BUS.post(new PlayerEvent.ItemCraftedEvent(player, resultForReward, craftMatrix));
+                    onCrafting(player, resultForReward, craftMatrix);
                     break;
                 } else if (iRecipe instanceof ShapelessRecipes) {
                     ShapelessRecipes shapelessRecipe = (ShapelessRecipes) iRecipe;
@@ -439,8 +526,7 @@ public class CraftingHelper {
                         for (int i = 0; i < shapelessRecipe.recipeItems.size(); i++)
                             craftMatrix.setInventorySlotContents(i, shapelessRecipe.recipeItems.get(i));
                     }
-
-                    MinecraftForge.EVENT_BUS.post(new PlayerEvent.ItemCraftedEvent(player, resultForReward, craftMatrix));
+                    onCrafting(player, resultForReward, craftMatrix);
                     break;
                 } else if (iRecipe instanceof ShapedOreRecipe) {
                     ShapedOreRecipe oreRecipe = (ShapedOreRecipe) iRecipe;
@@ -453,14 +539,62 @@ public class CraftingHelper {
                             if (((NonNullList) input[i]).size() != 0)
                                 craftMatrix.setInventorySlotContents(i, (ItemStack) ((NonNullList) input[i]).get(0));
                     }
-
-                    MinecraftForge.EVENT_BUS.post(new PlayerEvent.ItemCraftedEvent(player, resultForReward, craftMatrix));
+                    onCrafting(player, resultForReward, craftMatrix);
                 }
             }
-
             return true;
         }
         return false;
+    }
+
+    /**
+     * TODO Copied from SlotFurncaeOutput.onCrafting - change to mixin to remove redundant code
+     * @param stack - item stack that was crafted
+     */
+    protected static void onSmelting(EntityPlayer player, ItemStack stack)
+    {
+        stack.onCrafting(player.world, player, stack.getCount());
+
+        if (!player.world.isRemote)
+        {
+            int i = stack.getCount();
+            float f = FurnaceRecipes.instance().getSmeltingExperience(stack);
+
+            if (f == 0.0F)
+            {
+                i = 0;
+            }
+            else if (f < 1.0F)
+            {
+                int j = MathHelper.floor((float)i * f);
+
+                if (j < MathHelper.ceil((float)i * f) && Math.random() < (double)((float)i * f - (float)j))
+                {
+                    ++j;
+                }
+
+                i = j;
+            }
+
+            while (i > 0)
+            {
+                int k = EntityXPOrb.getXPSplit(i);
+                i -= k;
+                player.world.spawnEntity(new EntityXPOrb(player.world, player.posX, player.posY + 0.5D, player.posZ + 0.5D, k));
+            }
+        }
+
+        net.minecraftforge.fml.common.FMLCommonHandler.instance().firePlayerSmeltedEvent(player, stack);
+
+        if (stack.getItem() == Items.IRON_INGOT)
+        {
+            player.addStat(AchievementList.ACQUIRE_IRON);
+        }
+
+        if (stack.getItem() == Items.COOKED_FISH)
+        {
+            player.addStat(AchievementList.COOK_FISH);
+        }
     }
 
     /**
@@ -480,10 +614,9 @@ public class CraftingHelper {
         ItemStack isOutput = FurnaceRecipes.instance().getSmeltingList().get(input);
         if (isOutput == null)
             return false;
-        int cookingTime = 200;  // Seems to be hard-coded in TileEntityFurnace.
-        if (playerHasIngredients(player, ingredients) && totalBurnTimeInInventory(player) >= cookingTime) {
+        if (playerHasIngredients(player, ingredients) && totalBurnTimeInInventory(player) >= smeltingCookingTime) {
             removeIngredientsFromPlayer(player, ingredients);
-            burnInventory(player, cookingTime, input);
+            burnInventory(player, smeltingCookingTime, input);
 
             ItemStack resultForInventory = isOutput.copy();
             ItemStack resultForReward = isOutput.copy();
@@ -492,28 +625,32 @@ public class CraftingHelper {
             event.setCause(2);
             MinecraftForge.EVENT_BUS.post(event);
 
-            // Now trigger a smelt event
-            MinecraftForge.EVENT_BUS.post(new PlayerEvent.ItemSmeltedEvent(player, resultForReward));
+            // Trigger the furnace output removed item events
+            onSmelting(player, isOutput);
             return true;
         }
         return false;
     }
 
+    private static JsonObject listIngredients(NonNullList<ItemStack> ingredients){
+        JsonObject jsonObject = new JsonObject();
+        for (ItemStack ingredient: ingredients){
+            if (!ingredient.isEmpty() && Item.REGISTRY.getNameForObject(ingredient.getItem()) != null)
+                jsonObject.addProperty(Item.REGISTRY.getNameForObject(ingredient.getItem()).toString().replace("minecraft:", ""), ingredient.getCount());
+        }
+        return jsonObject;
+    }
+
     /**
-     * Little utility method for dumping out a list of all the Minecraft items, plus as many useful attributes as
-     * we can find for them. This is primarily used by decision_tree_test.py but might be useful for real-world applications too.
-     *
-     * @param filename location to save the dumped list.
-     * @throws IOException
+     * Little utility method for dumping out a json array of all the Minecraft items,  plus as many useful
+     * attributes as we can find for them. This is primarily used by decision_tree_test.py but might be useful for
+     * real-world applications too.
      */
-    public static void dumpItemProperties(String filename) throws IOException {
-        FileOutputStream fos = new FileOutputStream("..//..//build//install//Python_Examples//item_database.json");
-        OutputStreamWriter osw = new OutputStreamWriter(fos, "utf-8");
-        BufferedWriter writer = new BufferedWriter(osw);
-        JsonArray itemTypes = new JsonArray();
+    public static JsonArray generateItemJson(){
+        JsonArray items = new JsonArray();
         for (ResourceLocation i : Item.REGISTRY.getKeys()) {
             Item item = Item.REGISTRY.getObject(i);
-            if (item != null) {
+            if (item != null && Item.REGISTRY.getNameForObject(item) != null) {
                 JsonObject json = new JsonObject();
                 json.addProperty("type", Item.REGISTRY.getNameForObject(item).toString().replace("minecraft:", ""));
                 json.addProperty("damageable", item.isDamageable());
@@ -523,9 +660,10 @@ public class CraftingHelper {
                 json.addProperty("tab", ((tab != null) ? item.getCreativeTab().getTabLabel() : "none"));
                 ItemStack is = item.getDefaultInstance();
                 json.addProperty("stackable", is.isStackable());
+                json.addProperty("stackSize", is.getMaxStackSize());
+                json.addProperty("useAction", is.getItemUseAction().toString());
                 json.addProperty("enchantable", is.isItemEnchantable());
-                json.addProperty("rare", (is.getRarity() == EnumRarity.RARE));    // Enum has four types, but only two (COMMON and RARE) appear to be used.
-                json.addProperty("action", is.getItemUseAction().toString());
+                json.addProperty("rarity", is.getRarity().toString());
                 json.addProperty("hasSubtypes", item.getHasSubtypes());
                 json.addProperty("maxDamage", is.getMaxDamage());
                 json.addProperty("maxUseDuration", is.getMaxItemUseDuration());
@@ -541,18 +679,16 @@ public class CraftingHelper {
                     json.addProperty("canProvidePower", bs.canProvidePower());
                     json.addProperty("translucent", bs.isTranslucent());
                     Material mat = bs.getMaterial();
-                    if (mat != null) {
-                        json.addProperty("canBurn", mat.getCanBurn());
-                        json.addProperty("isLiquid", mat.isLiquid());
-                        json.addProperty("blocksMovement", mat.blocksMovement());
-                        json.addProperty("needsNoTool", mat.isToolNotRequired());
-                        json.addProperty("isReplaceable", mat.isReplaceable());
-                        json.addProperty("pistonPushable", mat.getMobilityFlag() == EnumPushReaction.NORMAL);
-                        json.addProperty("woodenMaterial", mat == Material.WOOD);
-                        json.addProperty("ironMaterial", mat == Material.IRON);
-                        json.addProperty("glassyMaterial", mat == Material.GLASS);
-                        json.addProperty("clothMaterial", mat == Material.CLOTH);
-                    }
+                    json.addProperty("canBurn", mat.getCanBurn());
+                    json.addProperty("isLiquid", mat.isLiquid());
+                    json.addProperty("blocksMovement", mat.blocksMovement());
+                    json.addProperty("needsNoTool", mat.isToolNotRequired());
+                    json.addProperty("isReplaceable", mat.isReplaceable());
+                    json.addProperty("pistonPushable", mat.getMobilityFlag() == EnumPushReaction.NORMAL);
+                    json.addProperty("woodenMaterial", mat == Material.WOOD);
+                    json.addProperty("ironMaterial", mat == Material.IRON);
+                    json.addProperty("glassyMaterial", mat == Material.GLASS);
+                    json.addProperty("clothMaterial", mat == Material.CLOTH);
 
                     boolean hasDirection = false;
                     boolean hasColour = false;
@@ -572,54 +708,109 @@ public class CraftingHelper {
                     json.addProperty("hasColour", hasColour);
                     json.addProperty("hasVariant", hasVariant);
                 }
-                itemTypes.add(json);
+                items.add(json);
             }
         }
+        return items;
+    }
+
+    /**
+     * Little utility method for gejerating a json array of all of the Minecraft blocks
+     */
+    public static JsonArray generateBlockJson(){
+        JsonArray blocks = new JsonArray();
+        for (ResourceLocation i : Block.REGISTRY.getKeys()) {
+            Block block = Block.REGISTRY.getObject(i);
+            JsonObject json = new JsonObject();
+            json.addProperty("name", Block.REGISTRY.getNameForObject(block).toString().replace("minecraft:", ""));
+            json.addProperty("particleGravity", block.blockParticleGravity);
+            json.addProperty("slipperiness", block.slipperiness);
+            json.addProperty("spawnInBlock", block.canSpawnInBlock());
+            json.addProperty("isCollidable", block.isCollidable());
+            try{
+                json.addProperty("quantityDropped", block.quantityDropped(null));
+            } catch (NullPointerException ignored){}
+            blocks.add(json);
+        }
+        return blocks;
+    }
+
+    /**
+     * Little utility method for generating a json array of all of the Minecraft crafting recipes
+     */
+    public static JsonArray generateCraftingRecipeJson(){
+        JsonArray craftingRecipes = new JsonArray();
+        for (IRecipe recipe : CraftingManager.getInstance().getRecipeList()) {
+            if (recipe == null || Item.REGISTRY.getNameForObject(recipe.getRecipeOutput().getItem()) == null)
+                continue;
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("outputItemName", Item.REGISTRY.getNameForObject(recipe.getRecipeOutput().getItem()).toString().replace("minecraft:", ""));
+            jsonObject.addProperty("outputCount", recipe.getRecipeOutput().getCount());
+            jsonObject.addProperty("recipeSize", recipe.getRecipeSize());
+            jsonObject.addProperty("type", recipe.getClass().getSimpleName());
+            jsonObject.add( "ingredients", listIngredients(getIngredients(recipe)));
+            craftingRecipes.add(jsonObject);
+        }
+        return craftingRecipes;
+    }
+
+    /**
+     * Little utility method for generating a json array of all of the Minecraft smelting recipes
+     */
+    public static JsonArray generateSmeltingRecipeJson(){
+        JsonArray smeltingRecipes = new JsonArray();
+        for (ItemStack isInput : FurnaceRecipes.instance().getSmeltingList().keySet()) {
+            ItemStack isOutput = FurnaceRecipes.instance().getSmeltingList().get(isInput);
+            if (Item.REGISTRY.getNameForObject(isOutput.getItem()) == null)
+                continue;
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("outputItemName", Item.REGISTRY.getNameForObject(isOutput.getItem()).toString().replace("minecraft:", ""));
+            jsonObject.addProperty("out", isOutput.getCount());
+            jsonObject.add("ingredients", listIngredients(NonNullList.withSize(1, isInput)));
+            smeltingRecipes.add(jsonObject);
+        }
+        return smeltingRecipes;
+    }
+
+    /**
+     * Little utility method for dumping out a list of all the Minecraft items, plus as many useful attributes as
+     * we can find for them. This is primarily used by decision_tree_test.py but might be useful for real-world applications too.
+     *
+     * @param filename location to save the dumped list.
+     * @throws IOException
+     */
+    public static void dumpItemProperties(String filename) throws IOException {
+        FileOutputStream fos = new FileOutputStream("..//..//build//install//Python_Examples//item_database.json");
+        OutputStreamWriter osw = new OutputStreamWriter(fos, "utf-8");
+        BufferedWriter writer = new BufferedWriter(osw);
+        JsonArray itemTypes = generateItemJson();
         writer.write(itemTypes.toString());
         writer.close();
     }
 
     /**
-     * Little utility method for dumping out a list of all the recipes we understand.
+     * Utility method to auto-generate item, block, and recipe lists as individual json arrays
      *
-     * @param filename location to save the dumped list.
-     * @throws IOException
+     * @param filename location to save the dumped json file.
      */
-    public static void dumpRecipes(String filename) throws IOException {
-        FileOutputStream fos = new FileOutputStream(filename);
-        OutputStreamWriter osw = new OutputStreamWriter(fos, "utf-8");
-        BufferedWriter writer = new BufferedWriter(osw);
-        List<?> recipes = CraftingManager.getInstance().getRecipeList();
-        for (Object obj : recipes) {
-            if (obj == null)
-                continue;
-            if (obj instanceof IRecipe) {
-                ItemStack is = ((IRecipe) obj).getRecipeOutput();
-                if (is == null)
-                    continue;
-                String s = is.getCount() + "x" + is.getUnlocalizedName() + " = ";
-                List<ItemStack> ingredients = getIngredients((IRecipe) obj);
-                if (ingredients == null)
-                    continue;
-                boolean first = true;
-                for (ItemStack isIngredient : ingredients) {
-                    if (!first)
-                        s += ", ";
-                    s += isIngredient.getCount() + "x" + isIngredient.getUnlocalizedName();
-                    s += "(" + isIngredient.getDisplayName() + ")";
-                    first = false;
-                }
-                s += "\n";
-                writer.write(s);
-            }
+    public static void dumpMinecraftObjectRules(String filename) {
+        JsonObject allRecipes = new JsonObject();
+        allRecipes.addProperty("docstring", "THIS IS AN AUTO GENERATED FILE! This file was generated by " +
+                "com.microsoft.Malmo.Utils.CraftingHelper.dumpMinecraftObjectRules(). Generate this file by " +
+                "launching Malmo and pressing the ENTER key (see MalmoModClient.java) or by adding the following to " +
+                "MixinMinecraftServerRun.java: CraftingHelper.dumpMinecraftObjectRules(\"/full/path/mc_constants.json\");");
+        allRecipes.add("craftingRecipes", generateCraftingRecipeJson());
+        allRecipes.add("smeltingRecipes", generateSmeltingRecipeJson());
+        allRecipes.add("items", generateItemJson());
+        allRecipes.add("blocks", generateBlockJson());
+        try {
+            Writer writer = new FileWriter(filename);
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            gson.toJson(allRecipes, writer);
+            System.out.println("Wrote json to " + System.getProperty("user.dir") + filename);
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        Iterator<?> furnaceIt = FurnaceRecipes.instance().getSmeltingList().keySet().iterator();
-        while (furnaceIt.hasNext()) {
-            ItemStack isInput = (ItemStack) furnaceIt.next();
-            ItemStack isOutput = (ItemStack) FurnaceRecipes.instance().getSmeltingList().get(isInput);
-            String s = isOutput.getCount() + "x" + isOutput.getUnlocalizedName() + " = FUEL + " + isInput.getCount() + "x" + isInput.getUnlocalizedName() + "\n";
-            writer.write(s);
-        }
-        writer.close();
     }
 }

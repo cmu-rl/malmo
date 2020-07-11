@@ -19,6 +19,11 @@
 
 package com.microsoft.Malmo.Utils;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
@@ -34,6 +39,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import net.minecraft.stats.StatList;
+import net.minecraft.stats.StatisticsManagerServer;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
 
 /**
  * Helper class for building the "World data" to be passed from Minecraft back to the agent.<br>
@@ -56,7 +65,8 @@ public class JSONWorldDataHelper
         public int zMin;
         public int zMax;
         public boolean absoluteCoords;
-        
+        public boolean projectDown;
+
         /**
          * Default constructor asks for an environment just big enough to contain
          * the player and one block all around him.
@@ -66,8 +76,9 @@ public class JSONWorldDataHelper
             this.zMin = -1; this.zMax = 1;
             this.yMin = -1; this.yMax = 2;
             this.absoluteCoords = false;
+            this.projectDown = false;
         }
-        
+
         /**
          * Convenient constructor - effectively specifies the margin around the player<br>
          * Passing (1,1,1) will have the same effect as the default constructor.
@@ -80,8 +91,9 @@ public class JSONWorldDataHelper
             this.yMin = -yMargin; this.yMax = yMargin + 1;  // +1 because the player is two blocks tall.
             this.zMin = -zMargin; this.zMax = zMargin;
             this.absoluteCoords = false;
+            this.projectDown = false;
         }
-        
+
         /**
          * Convenient constructor for the case where all that is required is the flat patch of ground<br>
          * around the player's feet.
@@ -93,9 +105,10 @@ public class JSONWorldDataHelper
             this.yMin = -1; this.yMax = -1;  // Flat patch of ground at the player's feet.
             this.zMin = -zMargin; this.zMax = zMargin;
             this.absoluteCoords = false;
+            this.projectDown = false;
         }
     };
-    
+
     /** Builds the basic achievement world data to be used as observation signals by the listener.
      * @param json a JSON object into which the achievement stats will be added.
      */
@@ -105,20 +118,20 @@ public class JSONWorldDataHelper
 
             StatisticsManagerServer sfw = Minecraft.getMinecraft().getIntegratedServer().getPlayerList().getPlayerStatsFile(player);
 
-            json.addProperty("DistanceTravelled", 
-                sfw.readStat((StatBase)StatList.WALK_ONE_CM) 
-                + sfw.readStat((StatBase)StatList.SWIM_ONE_CM)
-                + sfw.readStat((StatBase)StatList.DIVE_ONE_CM) 
-                + sfw.readStat((StatBase)StatList.FALL_ONE_CM)
+            json.addProperty("DistanceTravelled",
+                sfw.readStat(StatList.WALK_ONE_CM)
+                + sfw.readStat(StatList.SWIM_ONE_CM)
+                + sfw.readStat(StatList.DIVE_ONE_CM)
+                + sfw.readStat(StatList.FALL_ONE_CM)
                 ); // TODO: there are many other ways of moving!
-            json.addProperty("TimeAlive", sfw.readStat((StatBase)StatList.TIME_SINCE_DEATH));
-            json.addProperty("MobsKilled", sfw.readStat((StatBase)StatList.MOB_KILLS));
-            json.addProperty("PlayersKilled", sfw.readStat((StatBase)StatList.PLAYER_KILLS));
-            json.addProperty("DamageTaken", sfw.readStat((StatBase)StatList.DAMAGE_TAKEN));
-            json.addProperty("DamageDealt", sfw.readStat((StatBase)StatList.DAMAGE_DEALT));
+            json.addProperty("TimeAlive", sfw.readStat(StatList.TIME_SINCE_DEATH));
+            json.addProperty("MobsKilled", sfw.readStat(StatList.MOB_KILLS));
+            json.addProperty("PlayersKilled", sfw.readStat(StatList.PLAYER_KILLS));
+            json.addProperty("DamageTaken", sfw.readStat(StatList.DAMAGE_TAKEN));
+            json.addProperty("DamageDealt", sfw.readStat(StatList.DAMAGE_DEALT));
         }
 
-        
+
 
         /* Other potential reinforcement signals that may be worth researching:
         json.addProperty("BlocksDestroyed", sfw.readStat((StatBase)StatList.objectBreakStats) - but objectBreakStats is an array of 32000 StatBase objects - indexed by block type.);
@@ -134,12 +147,12 @@ public class JSONWorldDataHelper
         json.addProperty("Life", player.getHealth());
         json.addProperty("Score", player.getScore());    // Might always be the same as XP?
         json.addProperty("Food", player.getFoodStats().getFoodLevel());
+        json.addProperty("Saturation", player.getFoodStats().getSaturationLevel());
         json.addProperty("XP", player.experienceTotal);
         json.addProperty("IsAlive", !player.isDead);
         json.addProperty("Air", player.getAir());
         json.addProperty("Name", player.getName());
     }
-    
     /** Builds the player position data to be used as observation signals by the listener.
      * @param json a JSON object into which the positional information will be added.
      */
@@ -174,26 +187,53 @@ public class JSONWorldDataHelper
 
         JsonArray arr = new JsonArray();
         BlockPos pos = new BlockPos(player.posX, player.posY, player.posZ);
-        for (int y = environmentDimensions.yMin; y <= environmentDimensions.yMax; y++)
+        // TODO peterz implement projection in any direction, not only down in y
+        // direction
+        if (environmentDimensions.projectDown)
         {
             for (int z = environmentDimensions.zMin; z <= environmentDimensions.zMax; z++)
             {
                 for (int x = environmentDimensions.xMin; x <= environmentDimensions.xMax; x++)
                 {
-                    BlockPos p;
-                    if( environmentDimensions.absoluteCoords )
-                        p = new BlockPos(x, y, z);
-                    else
-                        p = pos.add(x, y, z);
-                    String name = "";
-                    IBlockState state = player.world.getBlockState(p);
-                    Object blockName = Block.REGISTRY.getNameForObject(state.getBlock());
-                    if (blockName instanceof ResourceLocation)
-                    {
-                        name = ((ResourceLocation)blockName).getResourcePath();
+                    for (int y = environmentDimensions.yMax; y >= environmentDimensions.yMin; y--) {
+                        BlockPos p;
+                        if (environmentDimensions.absoluteCoords)
+                            p = new BlockPos(x, y, z);
+                        else
+                            p = pos.add(x, y, z);
+                        String name = "";
+                        IBlockState state = player.world.getBlockState(p);
+                        Object blockName = Block.REGISTRY.getNameForObject(state.getBlock());
+                        if (blockName instanceof ResourceLocation) {
+                            name = ((ResourceLocation) blockName).getResourcePath();
+                        }
+                        if (name.equals("air"))
+                            continue;
+                        JsonElement element = new JsonPrimitive(name);
+                        arr.add(element);
+                        break;
                     }
-                    JsonElement element = new JsonPrimitive(name);
-                    arr.add(element);
+                }
+            }
+        } else {
+            for (int y = environmentDimensions.yMin; y <= environmentDimensions.yMax; y++) {
+                for (int z = environmentDimensions.zMin; z <= environmentDimensions.zMax; z++) {
+                    for (int x = environmentDimensions.xMin; x <= environmentDimensions.xMax; x++)
+                    {
+                        BlockPos p;
+                        if (environmentDimensions.absoluteCoords)
+                            p = new BlockPos(x, y, z);
+                        else
+                            p = pos.add(x, y, z);
+                        String name = "";
+                        IBlockState state = player.world.getBlockState(p);
+                        Object blockName = Block.REGISTRY.getNameForObject(state.getBlock());
+                        if (blockName instanceof ResourceLocation) {
+                            name = ((ResourceLocation) blockName).getResourcePath();
+                        }
+                        JsonElement element = new JsonPrimitive(name);
+                        arr.add(element);
+                    }
                 }
             }
         }

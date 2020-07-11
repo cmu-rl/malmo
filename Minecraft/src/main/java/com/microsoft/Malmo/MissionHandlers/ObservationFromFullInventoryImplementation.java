@@ -177,7 +177,7 @@ public class ObservationFromFullInventoryImplementation extends ObservationFromS
         for (int i = 0; i < inventory.getSizeInventory(); i++)
         {
             ItemStack is = inventory.getStackInSlot(i);
-            if (is != null && !is.isEmpty())
+            if (is != null)
             {
                 JsonObject jobj = new JsonObject();
                 DrawItem di = MinecraftTypeHelper.getDrawItemFromItemStack(is);
@@ -189,7 +189,7 @@ public class ObservationFromFullInventoryImplementation extends ObservationFromS
                 jobj.addProperty("type", name);
                 jobj.addProperty("index", i);
                 jobj.addProperty("quantity", is.getCount());
-                jobj.addProperty("inventory",  invName);
+                jobj.addProperty("inventory", invName);
                 arr.add(jobj);
             }
         }

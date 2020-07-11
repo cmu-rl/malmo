@@ -5,7 +5,9 @@
       "MixinMinecraftServerRun",
       "MixinMinecraftGameloop",
       "MixinWorldProviderSpawn",
-      "MixinEntityRandom"
+      "MixinEntityRandom",
+      "MixinNoGuiEntityInteract",
+      "MixinLargeInventory"
     ],
     "server": [
     ],

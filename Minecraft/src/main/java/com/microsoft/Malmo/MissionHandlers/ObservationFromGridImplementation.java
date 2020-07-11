@@ -30,11 +30,21 @@ import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.google.gson.JsonObject;
 import com.microsoft.Malmo.Schemas.GridDefinition;
 import com.microsoft.Malmo.Schemas.ObservationFromGrid;
 import com.microsoft.Malmo.Utils.JSONWorldDataHelper;
 import com.microsoft.Malmo.Utils.JSONWorldDataHelper.GridDimensions;
+
+import io.netty.buffer.ByteBuf;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraftforge.fml.common.network.ByteBufUtils;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
+import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 /** IObservationProducer that spits out block types of the cell around the player.<br>
  * The size of the cell can be specified in the MissionInit XML.
@@ -52,7 +62,9 @@ public class ObservationFromGridImplementation extends ObservationFromServer
         int zMax;
         String name;
         boolean absoluteCoords;
-        SimpleGridDef(int xmin, int ymin, int zmin, int xmax, int ymax, int zmax, String name, boolean absoluteCoords)
+        boolean projectDown;
+        boolean atSpawn;
+        SimpleGridDef(int xmin, int ymin, int zmin, int xmax, int ymax, int zmax, String name, boolean absoluteCoords, boolean projectDown, boolean atSpawn)
         {
             this.xMin = xmin;
             this.yMin = ymin;
@@ -62,8 +74,10 @@ public class ObservationFromGridImplementation extends ObservationFromServer
             this.zMax = zmax;
             this.name = name;
             this.absoluteCoords = absoluteCoords;
+            this.projectDown = projectDown;
+            this.atSpawn = atSpawn;
         }
-        GridDimensions getEnvirons()
+        GridDimensions getEnvirons(EntityPlayerMP player)
         {
             GridDimensions env = new GridDimensions();
             env.xMax = this.xMax;
@@ -73,6 +87,20 @@ public class ObservationFromGridImplementation extends ObservationFromServer
             env.yMin = this.yMin;
             env.zMin = this.zMin;
             env.absoluteCoords = this.absoluteCoords;
+            env.projectDown = this.projectDown;
+
+            if (this.atSpawn) {
+                env.absoluteCoords = true;
+                env.projectDown = false;
+
+                env.xMax = this.xMax + (int)player.world.getSpawnPoint().getX();
+                env.yMax = this.yMax + (int)player.world.getSpawnPoint().getY();
+                env.zMax = this.zMax + (int)player.world.getSpawnPoint().getZ();
+                env.xMin = this.xMin + (int)player.world.getSpawnPoint().getX();
+                env.yMin = this.yMin + (int)player.world.getSpawnPoint().getY();
+                env.zMin = this.zMin + (int)player.world.getSpawnPoint().getZ();
+            }
+
             return env;
         }
     }
@@ -97,7 +125,9 @@ public class ObservationFromGridImplementation extends ObservationFromServer
                     gd.getMax().getY().intValue(),
                     gd.getMax().getZ().intValue(),
                     gd.getName(),
-                    gd.isAbsoluteCoords());
+                    gd.isAbsoluteCoords(),
+                    gd.isProjectDown(),
+                    gd.isAtSpawn());
             this.environs.add(sgd);
         }
         return true;
@@ -124,9 +154,8 @@ public class ObservationFromGridImplementation extends ObservationFromServer
             for (int i = 0; i < numGrids; i++)
             {
                 SimpleGridDef sgd = new SimpleGridDef(buf.readInt(), buf.readInt(), buf.readInt(),
-                                                      buf.readInt(), buf.readInt(), buf.readInt(), 
-                                                      ByteBufUtils.readUTF8String(buf),
-                                                      buf.readBoolean());
+                        buf.readInt(), buf.readInt(), buf.readInt(),
+                        ByteBufUtils.readUTF8String(buf), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
                 this.environs.add(sgd);
             }
         }
@@ -145,6 +174,8 @@ public class ObservationFromGridImplementation extends ObservationFromServer
                 buf.writeInt(sgd.zMax);
                 ByteBufUtils.writeUTF8String(buf, sgd.name);
                 buf.writeBoolean(sgd.absoluteCoords);
+                buf.writeBoolean(sgd.projectDown);
+                buf.writeBoolean(sgd.atSpawn);
             }
         }
 
@@ -163,7 +194,7 @@ public class ObservationFromGridImplementation extends ObservationFromServer
                 {
                     for (SimpleGridDef sgd : environs)
                     {
-                        JSONWorldDataHelper.buildGridData(json, sgd.getEnvirons(), player, sgd.name);
+                        JSONWorldDataHelper.buildGridData(json, sgd.getEnvirons(player), player, sgd.name);
                     }
                 }
             }

@@ -21,6 +21,9 @@ package com.microsoft.Malmo.Utils;
 
 import java.lang.reflect.Field;
 
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.util.Session;
@@ -34,8 +37,14 @@ public class AuthenticationHelper
 
         // Create new session object:
         Session newSession = new Session(newPlayerName, currentSession.getPlayerID(), currentSession.getToken(), "mojang"/*currentSession.getSessionType().toString()*/);
-        newSession.setProperties(new com.mojang.authlib.properties.PropertyMap());  // Prevents calls to the session service to get profile properties
-        return setSession(newSession);
+        PropertyMap newProperties = new PropertyMap();
+        // If the player's profile properties are empty, MC will keep pinging the
+        // Minecraft session service
+        // to fill them, resulting in multiple http requests and grumpy responses from
+        // the server (see https://github.com/Microsoft/malmo/issues/568).
+        newProperties.put("dummy", new Property("dummy", "property"));
+        newSession.setProperties(newProperties); // Prevents calls to the session service to get profile properties;
+        return setSession(newSession) && injectProfileProperties(newProperties);
     }
 
     private static boolean setSession(Session newSession)
@@ -67,6 +76,25 @@ public class AuthenticationHelper
         }
         catch (NoSuchFieldException e)
         {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private static boolean injectProfileProperties(PropertyMap newProperties) {
+        assert (Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment");
+        try {
+            Field props = Minecraft.class.getDeclaredField("profileProperties");
+            props.setAccessible(true);
+            props.set(Minecraft.getMinecraft(), newProperties);
+            return true;
+        } catch (SecurityException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+        } catch (NoSuchFieldException e) {
             e.printStackTrace();
         }
         return false;

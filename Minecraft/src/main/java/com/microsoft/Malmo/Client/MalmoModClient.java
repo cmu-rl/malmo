@@ -179,28 +179,64 @@ public class MalmoModClient
             @Override
             public void onPressed()
             {
+                // TODO (R): This is a really janky way of extracting constants. This should 
+                // just happen from the command line. -_-
                 // Use this if you want to test some code with a handy key press
-                try
-                {
-                    CraftingHelper.dumpRecipes("recipe_dump.txt");
-                }
-                catch (IOException e)
-                {
-                    e.printStackTrace();
-                }
+                CraftingHelper.dumpMinecraftObjectRules("../minerl/core/mc_constants.json");
             }
         });
         this.keyManager = new KeyManager(settings, extraKeys);
     }
-    
-    /*
+
+    /**
+     * Event listener that prevents agents from opening gui windows by canceling the 'USE' action of a block
+     * deny (most) blocks that open a gui when {@link net.minecraft.block.Block#onBlockActivated} is called
+     * @param event the captured event
+     */
     @SideOnly(Side.CLIENT)
-    @SubscribeEvent
-    public void onEvent(GuiOpenEvent event)
-    {
-        if (event.getGui() instanceof GuiIngameModOptions)
-        {
-            event.setGui(new MalmoModGuiOptions.MalmoModGuiScreen(null));
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onRightClickEvent(PlayerInteractEvent.RightClickBlock event){
+        if(this.stateMachine.getStableState() == ClientState.RUNNING){
+            Logger logger = Logger.getLogger("MalmoModClient.onRightClickEvent");
+            Minecraft mc = Minecraft.getMinecraft();
+            logger.log(Level.INFO, "Saw hit on " + mc.objectMouseOver.typeOfHit.toString());
+            if (mc.objectMouseOver.typeOfHit.equals(RayTraceResult.Type.BLOCK)) {
+                BlockPos blockpos = mc.objectMouseOver.getBlockPos();
+                IBlockState blockState = mc.world.getBlockState(blockpos);
+                if (blockState.getBlock() instanceof BlockContainer
+                || blockState.getBlock() instanceof BlockWorkbench){
+                    event.setUseBlock(Event.Result.DENY);
+                    logger.log(Level.INFO, "Denied usage of " + blockState.getBlock().getRegistryName().toString());
+                }
+                else
+                    logger.log(Level.INFO, "Allowed usage of " + blockState.getBlock().getRegistryName().toString());
+            } else if (mc.objectMouseOver.typeOfHit.equals(RayTraceResult.Type.ENTITY)) {
+                // This does not seem to be possible given the case logic in Minecraft.java @ line 1585
+                // Included here in the event objectMouseOver changes between these cases
+                if (mc.objectMouseOver.entityHit instanceof EntityVillager
+                || mc.objectMouseOver.entityHit instanceof EntityMinecartContainer
+                || mc.objectMouseOver.entityHit instanceof EntityMinecartCommandBlock) {
+                    event.setUseBlock(Event.Result.DENY);
+                    logger.log(Level.SEVERE, "Denied usage of " + mc.objectMouseOver.entityHit.getName() + "! This" +
+                            "is not expected to happen!");
+                }
+
+            }
         }
-    }*/
+    }
+
+    /**
+     * Event listener that logs when agents open gui windows
+     * @param event the captured event
+     */
+    @SideOnly(Side.CLIENT)
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onGuiOpenEvent(GuiOpenEvent event){
+        if(this.stateMachine.getStableState() == ClientState.RUNNING){
+            Logger logger = Logger.getLogger("MalmoModClient.onGuiOpenEvent");
+            if (event != null && event.getGui() != null)
+                logger.log(Level.WARNING, "GUI Window " + event.getGui().getClass().getSimpleName() + " opened!");
+        }
+
+    }
 }

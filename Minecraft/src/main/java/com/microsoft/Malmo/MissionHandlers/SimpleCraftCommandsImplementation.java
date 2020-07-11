@@ -83,7 +83,7 @@ public class SimpleCraftCommandsImplementation extends CommandBase
                     return null;
             }
             // Now try furnace recipes:
-            ItemStack input = CraftingHelper.getSmeltingRecipeForRequestedOutput(message.parameters);
+            ItemStack input = CraftingHelper.getSmeltingRecipeForRequestedOutput(message.parameters, player);
             if (input != null)
             {
                 if (CraftingHelper.attemptSmelting(player, input))
