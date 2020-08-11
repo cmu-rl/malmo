@@ -224,13 +224,13 @@ public class MalmoEnvServer implements IWantToQuit {
                                     dout.write(data, 0, hdr);
                                     dout.flush();
                                 } else {
-                                    throw new IOException("Unknown env service command");
+                                    throw new IOException("Unknown env service command: " + command);
                                 }
                             }
                         } catch (IOException ioe) {
-                            // ioe.printStackTrace();
+                            ioe.printStackTrace();
                             TCPUtils.Log(Level.SEVERE, "MalmoEnv socket error: " + ioe + " (can be on disconnect)");
-                            // System.out.println("[ERROR] " + "MalmoEnv socket error: " + ioe + " (can be on disconnect)");
+                            System.out.println("[ERROR] " + "MalmoEnv socket error: " + ioe + " (can be on disconnect)");
                             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] MalmoEnv socket error");
                             try {
                                 if (running) {
@@ -274,7 +274,6 @@ public class MalmoEnvServer implements IWantToQuit {
         din.readFully(data);
         String id = new String(data, utf8);
 
-        System.out.println("MISSION INIT: " + id);
         TCPUtils.Log(Level.INFO,"Mission Init" + id);
 
         String[] token = id.split(":");
@@ -287,19 +286,14 @@ public class MalmoEnvServer implements IWantToQuit {
         if(token.length > 5)
             seed = Long.parseLong(token[5]);
 
-        System.out.println("MISSION INIT vars: " + experimentId + ", " + role + ", " + reset + ", " + agentCount + ", " + isSynchronous + ", " + seed);
         port = -1;
         boolean allTokensConsumed = true;
         boolean started = false;
 
-        System.out.println("MISSION INIT LOCKING...");
         lock.lock();
-        System.out.println("MISSION INIT LOCKED");
         try {
             TimeHelper.SyncManager.role = role;
             if (role == 0) {
-                System.out.println("MISSION INIT MASTER");
-
                 String previousToken = experimentId + ":0:" + (reset - 1);
                 initTokens.remove(previousToken);
 
@@ -324,7 +318,6 @@ public class MalmoEnvServer implements IWantToQuit {
                     allTokensConsumed = areAllTokensConsumed(experimentId, reset, agentCount);
                 }
             } else {
-                System.out.println("MISSION INIT SLAVE");
                 TCPUtils.Log(Level.INFO, "Start " + role + " reset " + reset);
 
                 started = startUp(command, ipOriginator, experimentId, reset, agentCount, experimentId + ":" + role + ":" + reset, seed, isSynchronous);
@@ -333,11 +326,9 @@ public class MalmoEnvServer implements IWantToQuit {
             lock.unlock();
         }
 
-        System.out.println("MISSION INIT WRITING OUTPUT...");
         DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
         dout.writeInt(BYTES_INT);
         dout.writeInt(allTokensConsumed && started ? 1 : 0);
-        System.out.println("MISSION INIT DONE: "+ (allTokensConsumed && started));
         dout.flush();
 
         dout.flush();
