@@ -36,7 +36,6 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -153,11 +152,15 @@ public class MalmoEnvServer implements IWantToQuit {
 
                                 String command = new String(data, utf8);
 
-                                if (command.startsWith("<Step")) {
-                                    
+                                if (command.startsWith("<StepClient")) {
+
+                                    stepClient(command, socket, din);
+
+                                } else if (command.startsWith("<StepServer")) {
+
                                     profiler.startSection("root");
                                     long start = System.nanoTime();
-                                    step(command, socket, din);
+                                    stepServer(command, socket);
                                     profiler.endSection();
                                     if (nsteps % 100 == 0 && debug){
                                         List<Profiler.Result> dat = profiler.getProfilingData("root");
@@ -165,8 +168,11 @@ public class MalmoEnvServer implements IWantToQuit {
                                             Profiler.Result res = dat.get(qq);
                                             System.out.println(res.profilerName + " " + res.totalUsePercentage + " "+ res.usePercentage);
                                         }
-                                    } 
+                                    }
 
+                                } else if (command.startsWith("<Render")) {
+
+                                    render(command, socket);
 
                                 } else if (command.startsWith("<Peek")) {
 
@@ -263,7 +269,6 @@ public class MalmoEnvServer implements IWantToQuit {
 
     // Handler for <MissionInit> messages.
     private boolean missionInit(DataInputStream din, String command, Socket socket) throws IOException {
-
         String ipOriginator = socket.getInetAddress().getHostName();
 
         int hdr;
@@ -273,6 +278,7 @@ public class MalmoEnvServer implements IWantToQuit {
         din.readFully(data);
         String id = new String(data, utf8);
 
+        System.out.println("MISSION INIT: " + id);
         TCPUtils.Log(Level.INFO,"Mission Init" + id);
 
         String[] token = id.split(":");
@@ -285,16 +291,17 @@ public class MalmoEnvServer implements IWantToQuit {
         if(token.length > 5)
             seed = Long.parseLong(token[5]);
 
-        if(isSynchronous && agentCount > 1){
-            throw new IOException("Synchronous mode currently does not support multiple agents.");
-        }
+        System.out.println("MISSION INIT vars: " + experimentId + ", " + role + ", " + reset + ", " + agentCount + ", " + isSynchronous + ", " + seed);
         port = -1;
         boolean allTokensConsumed = true;
         boolean started = false;
 
+        System.out.println("MISSION INIT LOCKING...");
         lock.lock();
+        System.out.println("MISSION INIT LOCKED");
         try {
             if (role == 0) {
+                System.out.println("MISSION INIT MASTER");
 
                 String previousToken = experimentId + ":0:" + (reset - 1);
                 initTokens.remove(previousToken);
@@ -320,6 +327,7 @@ public class MalmoEnvServer implements IWantToQuit {
                     allTokensConsumed = areAllTokensConsumed(experimentId, reset, agentCount);
                 }
             } else {
+                System.out.println("MISSION INIT SLAVE");
                 TCPUtils.Log(Level.INFO, "Start " + role + " reset " + reset);
 
                 started = startUp(command, ipOriginator, experimentId, reset, agentCount, experimentId + ":" + role + ":" + reset, seed, isSynchronous);
@@ -328,9 +336,11 @@ public class MalmoEnvServer implements IWantToQuit {
             lock.unlock();
         }
 
+        System.out.println("MISSION INIT WRITING OUTPUT...");
         DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
         dout.writeInt(BYTES_INT);
         dout.writeInt(allTokensConsumed && started ? 1 : 0);
+        System.out.println("MISSION INIT DONE: "+ (allTokensConsumed && started));
         dout.flush();
 
         dout.flush();
@@ -401,27 +411,23 @@ public class MalmoEnvServer implements IWantToQuit {
         return false;
     }
 
-    private static final int stepTagLength = "<Step_>".length(); // Step with option code.
-    private synchronized void stepSync(String command, Socket socket, DataInputStream din) throws IOException 
+    private void waitTick() {
+        // run a client tick
+        while (!TimeHelper.SyncManager.requestClientTick()) { Thread.yield(); }
+        while (TimeHelper.SyncManager.shouldClientTick()) { Thread.yield(); }
+
+        // run a server tick
+        while (!TimeHelper.SyncManager.requestServerTick()) { Thread.yield(); }
+        while (TimeHelper.SyncManager.shouldServerTick()) { Thread.yield(); }
+    }
+
+    private static final int stepClientTagLength = "<StepClient_>".length(); // Step with option code.
+    private synchronized void stepClientSync(String command, Socket socket, DataInputStream din) throws IOException
     {
-        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Entering synchronous step.");
-        nsteps += 1;
+        TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <StepClient_> Entering synchronous step.");
         profiler.startSection("commandProcessing");
-        String actions = command.substring(stepTagLength, command.length() - (stepTagLength + 2));
-        int options =  Character.getNumericValue(command.charAt(stepTagLength - 2));
-        boolean withInfo = options == 0 || options == 2;
-
-
-
-        
-        // Prepare to write data to the client.
-        DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
-        double reward = 0.0;
+        String actions = command.substring(stepClientTagLength, command.length() - (stepClientTagLength + 2));
         boolean done;
-        byte[] obs;
-        String info = "";
-        boolean sent = false;
-
 
         // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Acquiring lock for synchronous step.");
 
@@ -431,22 +437,18 @@ public class MalmoEnvServer implements IWantToQuit {
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Lock is acquired.");
 
             done = envState.done;
-
             // TODO Handle when the environment is done.
 
-            // Process the actions.
+            // Process the actions.  (TODO - should the action order randomization be here?)
             if (actions.contains("\n")) {
                 String[] cmds = actions.split("\\n");
-                for(String cmd : cmds) {
+                for (String cmd : cmds) {
                     envState.commands.add(cmd);
                 }
             } else {
                 if (!actions.isEmpty())
                     envState.commands.add(actions);
             }
-            sent = true;
-            
-
 
             profiler.endSection(); //cmd
             profiler.startSection("requestTick");
@@ -456,30 +458,63 @@ public class MalmoEnvServer implements IWantToQuit {
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Requesting tick.");
             // Now wait to run a tick
             // If synchronous mode is off then we should see if want to quit is true.
-            while(!TimeHelper.SyncManager.requestTick() && !done ){Thread.yield();} 
+            while (!TimeHelper.SyncManager.requestClientTick() && !done) {
+                Thread.yield();
+            }
 
-            
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Tick request granted.");
 
             profiler.endSection();
-            profiler.startSection("waitForTick");
+            profiler.startSection("waitForClientTick");
 
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Waiting for tick.");
 
             // Then wait until the tick is finished
-            while(!TimeHelper.SyncManager.isTickCompleted() && !done ){ Thread.yield();}
-
+            while (TimeHelper.SyncManager.shouldClientTick() && !done) {
+                Thread.yield();
+            }
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> TICK DONE.  Getting observation.");
+        } finally {
+            lock.unlock();
+        }
+    }
 
+    private static final int stepServerTagLength = "<StepServer_>".length(); // Step with option code.
+    private synchronized void stepServerSync(String command, Socket socket) throws IOException
+    {
+        TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <StepServer_> Entering synchronous step.");
+        nsteps += 1;
+        int options =  Character.getNumericValue(command.charAt(stepServerTagLength - 2));
+        boolean withInfo = options == 0 || options == 2;
 
+        // Prepare to write data to the client.
+        DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
+        double reward = 0.0;
+        boolean done;
+        byte[] obs;
+        String info = "";
+        boolean sent = true;  // FIXME - what exactly is this indicating?
+
+        // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Acquiring lock for synchronous step.");
+
+        lock.lock();
+        try {
+            // Then wait until the tick is finished
+            done = envState.done;
+
+            // If synchronous mode is off then we should see if want to quit is true.
+            while (!TimeHelper.SyncManager.requestServerTick() && !done) {
+                Thread.yield();
+            }
+
+            while (TimeHelper.SyncManager.shouldClientTick() && !done ) { Thread.yield(); }
 
             profiler.endSection();
             profiler.startSection("getObservation");
             // After which, get the observations.
             obs = getObservation(done);
-
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Observation received. Getting info.");
 
@@ -502,8 +537,6 @@ public class MalmoEnvServer implements IWantToQuit {
             envState.info = null;
             envState.obs = null;
             envState.reward = 0.0;
-            
-
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Info received..");
             profiler.endSection();
@@ -538,15 +571,31 @@ public class MalmoEnvServer implements IWantToQuit {
 
         // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Done with step.");
     }
-    // Handler for <Step_> messages. Single digit option code after _ specifies if turnkey and info are included in message.
-    private void step(String command, Socket socket, DataInputStream din) throws IOException {
+
+    // Handler for <StepClient_> messages. Single digit option code after _ specifies if turnkey and info are included in message.
+    private void stepClient(String command, Socket socket, DataInputStream din) throws IOException {
         if(envState.synchronous){
-            stepSync(command, socket, din);
+            stepClientSync(command, socket, din);
         }
         else{
             System.out.println("[ERROR] Asynchronous stepping is not supported in MineRL.");
         }
-        
+    }
+
+    // Handler for <StepServer_> messages.
+    private void stepServer(String command, Socket socket) throws IOException {
+        if(envState.synchronous){
+            stepServerSync(command, socket);
+        }
+        else{
+            System.out.println("[ERROR] Asynchronous server stepping is not supported in MineRL.");
+        }
+    }
+
+    // Handler for <Render_> messages.
+    private void render(String command, Socket socket) throws IOException {
+        // TODO
+//        renderSync(command, socket);
     }
 
     // Handler for <Peek> messages.
@@ -561,34 +610,16 @@ public class MalmoEnvServer implements IWantToQuit {
 
         try {
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK> Waiting for pistol to fire.");
-            while(!TimeHelper.SyncManager.hasServerFiredPistol()){   
-                
-                    // Now wait to run a tick
-                while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
+            while(!TimeHelper.SyncManager.hasServerFiredPistol()){
+                waitTick();
 
-
-                // Then wait until the tick is finished
-                while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
-            
-                
                 Thread.yield(); 
             }
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK>  Pistol fired!.");
             // Wait two ticks for the first observation from server to be propagated.
-            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
-
-            // Then wait until the tick is finished
-            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
-        
-
-
-            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
-
-            // Then wait until the tick is finished
-            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
-        
-
+            waitTick();
+            waitTick();
 
             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK> Getting observation.");
 
@@ -738,14 +769,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 envState.quit = true;
             }
 
-             // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <PEEK>  Pistol fired!.");
-            // Wait two ticks for the first observation from server to be propagated.
-            while(!TimeHelper.SyncManager.requestTick() ){Thread.yield();} 
-
-            // Then wait until the tick is finished
-            while(!TimeHelper.SyncManager.isTickCompleted()){ Thread.yield();}
-            
-            
+            waitTick();
 
             DataOutputStream dout = new DataOutputStream(socket.getOutputStream());
             dout.writeInt(BYTES_INT);

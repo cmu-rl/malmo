@@ -53,6 +53,7 @@ public abstract class MixinMinecraftServerRun  {
     @Shadow public abstract void stopServer();
     @Shadow public abstract void systemExitNow();
     @Shadow public abstract void initiateShutdown();
+    @Shadow private int serverPort;
 
     public void run()
     {
@@ -67,6 +68,7 @@ public abstract class MixinMinecraftServerRun  {
                 this.statusResponse.setServerDescription(new TextComponentString(this.motd));
                 this.statusResponse.setVersion(new ServerStatusResponse.Version("1.11.2", 316));
                 this.applyServerIconToResponse(this.statusResponse);
+                System.out.println("SERVER STARTED: " + this.serverPort + " " + this.motd);
 
                 while (this.serverRunning)
                 {
@@ -104,15 +106,16 @@ public abstract class MixinMinecraftServerRun  {
 
                         if (TimeHelper.SyncManager.isSynchronous() && TimeHelper.SyncManager.numTicks > 32){
 
-                            if(TimeHelper.SyncManager.shouldServerTick() && 
-                            (TimeHelper.SyncManager.numTicks > 32)
-                            ){
+                            if(TimeHelper.SyncManager.shouldServerTick()){
 
                                 // TimeHelper.SyncManager.debugLog("[SERVER] tick start." +Long.toString(SyncManager.numTicks));
                                 this.tick();
                                 // TimeHelper.SyncManager.debugLog("[SERVER] tick end." +Long.toString(SyncManager.numTicks));
                                 TimeHelper.SyncManager.numTicks += 1;
                                 TimeHelper.SyncManager.completeServerTick();
+
+//                                if (isMaster)  // FIXME - always will be master if this mixin is running?
+                                TimeHelper.SyncManager.completeTick();
                             }
                         } else
                         {

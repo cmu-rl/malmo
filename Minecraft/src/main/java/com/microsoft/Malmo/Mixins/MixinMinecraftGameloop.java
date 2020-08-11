@@ -161,17 +161,6 @@ public abstract class MixinMinecraftGameloop {
             }
             
             this.mcProfiler.endSection(); //ClientTick
-            this.mcProfiler.startSection("serverTick");
-
-            // Wait for the server tick to finish.
-            // TimeHelper.SyncManager.debugLog("[Client] Client tick end. Client Waiting for server to tick!");
-            while(!TimeHelper.SyncManager.shouldRenderTick()) {
-                Thread.yield();
-            }
-
-            this.mcProfiler.endSection(); //serverTick
-
-
          } else{
             for (int j = 0; j < this.timer.elapsedTicks; ++j)
             {
@@ -238,21 +227,18 @@ public abstract class MixinMinecraftGameloop {
         lastUpdateTime = System.nanoTime();
         if(
             (TimeHelper.SyncManager.isSynchronous() && 
-            TimeHelper.SyncManager.isServerRunning() && 
-            TimeHelper.SyncManager.shouldRenderTick() &&
-            TimeHelper.SyncManager.isTicking()) || TimeHelper.SyncManager.shouldFlush()){
-            
-            
+            TimeHelper.SyncManager.isServerRunning()) || TimeHelper.SyncManager.shouldFlush()){
 
             this.mcProfiler.startSection("syncTickEventPost");
             MinecraftForge.EVENT_BUS.post(new TimeHelper.SyncTickEvent(Phase.END));
             this.mcProfiler.endSection();
             
             // TimeHelper.SyncManager.debugLog("[Client] Tick fully complete..");
-                
-            TimeHelper.SyncManager.completeTick();
 
-
+            boolean isMaster = true; // TODO - only for master client
+            if (!isMaster) {
+                TimeHelper.SyncManager.completeTick();
+            }
         }
         Thread.yield();
         this.checkGLError("Post render");
