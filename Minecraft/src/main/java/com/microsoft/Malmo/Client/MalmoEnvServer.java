@@ -170,10 +170,6 @@ public class MalmoEnvServer implements IWantToQuit {
                                         }
                                     }
 
-                                } else if (command.startsWith("<Render")) {
-
-                                    render(command, socket);
-
                                 } else if (command.startsWith("<Peek")) {
 
                                     peek(command, socket, din);
@@ -300,6 +296,7 @@ public class MalmoEnvServer implements IWantToQuit {
         lock.lock();
         System.out.println("MISSION INIT LOCKED");
         try {
+            TimeHelper.SyncManager.role = role;
             if (role == 0) {
                 System.out.println("MISSION INIT MASTER");
 
@@ -439,7 +436,7 @@ public class MalmoEnvServer implements IWantToQuit {
             done = envState.done;
             // TODO Handle when the environment is done.
 
-            // Process the actions.  (TODO - should the action order randomization be here?)
+            // Process the actions.
             if (actions.contains("\n")) {
                 String[] cmds = actions.split("\\n");
                 for (String cmd : cmds) {
@@ -590,12 +587,6 @@ public class MalmoEnvServer implements IWantToQuit {
         else{
             System.out.println("[ERROR] Asynchronous server stepping is not supported in MineRL.");
         }
-    }
-
-    // Handler for <Render_> messages.
-    private void render(String command, Socket socket) throws IOException {
-        // TODO
-//        renderSync(command, socket);
     }
 
     // Handler for <Peek> messages.

@@ -60,6 +60,7 @@ public class TimeHelper
         static Boolean serverPistolFired = false;
         public static long numTicks = 0;
         final static Boolean verbose = false;
+        public static int role = 0;
 
         public static synchronized Boolean isSynchronous(){
             return synchronous;

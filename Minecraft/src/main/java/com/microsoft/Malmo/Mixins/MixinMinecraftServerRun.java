@@ -112,7 +112,7 @@ public abstract class MixinMinecraftServerRun  {
                                 this.tick();
                                 // TimeHelper.SyncManager.debugLog("[SERVER] tick end." +Long.toString(SyncManager.numTicks));
                                 TimeHelper.SyncManager.numTicks += 1;
-                                TimeHelper.SyncManager.completeServerTick();
+//                                TimeHelper.SyncManager.completeServerTick();  // FIXME - not needed with completeTick below
 
 //                                if (isMaster)  // FIXME - always will be master if this mixin is running?
                                 TimeHelper.SyncManager.completeTick();

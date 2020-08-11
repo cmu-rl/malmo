@@ -235,8 +235,7 @@ public abstract class MixinMinecraftGameloop {
             
             // TimeHelper.SyncManager.debugLog("[Client] Tick fully complete..");
 
-            boolean isMaster = true; // TODO - only for master client
-            if (!isMaster) {
+            if (TimeHelper.SyncManager.role != 0) {
                 TimeHelper.SyncManager.completeTick();
             }
         }
