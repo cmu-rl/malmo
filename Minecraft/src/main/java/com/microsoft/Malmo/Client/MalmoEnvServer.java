@@ -23,6 +23,7 @@ import com.microsoft.Malmo.MalmoMod;
 import com.microsoft.Malmo.Client.MalmoModClient.InputType;
 import com.microsoft.Malmo.MissionHandlerInterfaces.IWantToQuit;
 import com.microsoft.Malmo.Schemas.MissionInit;
+import com.microsoft.Malmo.Utils.LogHelper;
 import com.microsoft.Malmo.Utils.TCPUtils;
 
 import net.minecraft.client.Minecraft;
@@ -128,10 +129,8 @@ public class MalmoEnvServer implements IWantToQuit {
      * @throws IOException
      */
     public void serve() throws IOException {
-
         ServerSocket serverSocket = new ServerSocket(port);
         serverSocket.setPerformancePreferences(0,2,1);
-
 
         while (true) {
             try {
@@ -236,7 +235,7 @@ public class MalmoEnvServer implements IWantToQuit {
                                 if (running) {
                                     TCPUtils.Log(Level.INFO,"Want to quit on disconnect.");
 
-                                    System.out.println("[LOGTOPY] " + "Want to quit on disconnect.");
+                                    System.out.println( "[LOGTOPY] " + "Want to quit on disconnect.");
                                     setWantToQuit();
                                 }
                                 socket.close();
@@ -248,6 +247,7 @@ public class MalmoEnvServer implements IWantToQuit {
                 thread.start();
             } catch (IOException ioe) {
                 TCPUtils.Log(Level.SEVERE, "MalmoEnv service exits on " + ioe);
+                LogHelper.error("MalmoEnvServer died", ioe);
             }
         }
     }
@@ -286,7 +286,7 @@ public class MalmoEnvServer implements IWantToQuit {
         if(token.length > 5)
             seed = Long.parseLong(token[5]);
 
-        port = -1;
+//        port = -1;  // FIXME - why was this happening?
         boolean allTokensConsumed = true;
         boolean started = false;
 

@@ -137,8 +137,8 @@
                <Block behaviour="constant" reward="5" type="brick_block" />
             </RewardForTouchingBlockType>
             <VideoProducer want_depth="false">
-               <Width>800</Width>
-               <Height>600</Height>
+               <Width>640</Width>
+               <Height>480</Height>
             </VideoProducer>
          </AgentHandlers>
       </AgentSection>

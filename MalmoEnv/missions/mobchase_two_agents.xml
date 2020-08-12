@@ -148,8 +148,8 @@
                <Block description="Agent0_defaulted" type="bone_block" />
             </AgentQuitFromTouchingBlockType>
             <VideoProducer want_depth="false">
-               <Width>800</Width>
-               <Height>600</Height>
+               <Width>640</Width>
+               <Height>480</Height>
             </VideoProducer>
          </AgentHandlers>
       </AgentSection>
