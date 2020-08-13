@@ -145,7 +145,6 @@ public class MalmoEnvServer implements IWantToQuit {
 
                             while (true) {
                                 DataInputStream din = new DataInputStream(socket.getInputStream());
-                                LogHelper.debug("Server waiting for command...");
                                 int hdr = 0;
                                 try {
                                     hdr = din.readInt();
@@ -158,7 +157,6 @@ public class MalmoEnvServer implements IWantToQuit {
                                 din.readFully(data);
 
                                 String command = new String(data, utf8);
-                                LogHelper.debug("Server received command: " + command);
 
                                 if (command.startsWith("<StepClient")) {
 
