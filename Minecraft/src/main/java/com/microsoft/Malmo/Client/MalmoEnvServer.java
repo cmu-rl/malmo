@@ -145,11 +145,20 @@ public class MalmoEnvServer implements IWantToQuit {
 
                             while (true) {
                                 DataInputStream din = new DataInputStream(socket.getInputStream());
-                                int hdr = din.readInt();
+                                LogHelper.debug("Server waiting for command...");
+                                int hdr = 0;
+                                try {
+                                    hdr = din.readInt();
+                                } catch (EOFException e) {
+                                    LogHelper.debug("Incoming socket connection closed, likely by peer (without Exit message): " + e);
+                                    socket.close();
+                                    break;
+                                }
                                 byte[] data = new byte[hdr];
                                 din.readFully(data);
 
                                 String command = new String(data, utf8);
+                                LogHelper.debug("Server received command: " + command);
 
                                 if (command.startsWith("<StepClient")) {
 
@@ -157,17 +166,7 @@ public class MalmoEnvServer implements IWantToQuit {
 
                                 } else if (command.startsWith("<StepServer")) {
 
-                                    profiler.startSection("root");
-                                    long start = System.nanoTime();
                                     stepServer(command, socket);
-                                    profiler.endSection();
-                                    if (nsteps % 100 == 0 && debug){
-                                        List<Profiler.Result> dat = profiler.getProfilingData("root");
-                                        for(int qq = 0; qq < dat.size(); qq++){
-                                            Profiler.Result res = dat.get(qq);
-                                            System.out.println(res.profilerName + " " + res.totalUsePercentage + " "+ res.usePercentage);
-                                        }
-                                    }
 
                                 } else if (command.startsWith("<Peek")) {
 
@@ -203,6 +202,8 @@ public class MalmoEnvServer implements IWantToQuit {
                                     exit(command, socket);
 
                                     profiler.profilingEnabled = false;
+
+                                    return; // exit
 
                                 } else if (command.startsWith("<Close")) {
 
@@ -412,7 +413,9 @@ public class MalmoEnvServer implements IWantToQuit {
     private static final int stepClientTagLength = "<StepClient_>".length(); // Step with option code.
     private synchronized void stepClientSync(String command, Socket socket, DataInputStream din) throws IOException
     {
+        profiler.startSection("rootClient");
         TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <StepClient_> Entering synchronous step.");
+
         profiler.startSection("commandProcessing");
         String actions = command.substring(stepClientTagLength, command.length() - (stepClientTagLength + 2));
         nsteps += 1;
@@ -527,11 +530,14 @@ public class MalmoEnvServer implements IWantToQuit {
         // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Packets written. Flushing.");
         dout.flush();
         profiler.endSection(); // flush
+
+        profiler.endSection(); // rootClient
     }
 
     private static final int stepServerTagLength = "<StepServer_>".length(); // Step with option code.
     private synchronized void stepServerSync(String command, Socket socket) throws IOException
     {
+        profiler.startSection("rootServer");
         TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <StepServer_> Entering synchronous step.");
 
         // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Acquiring lock for synchronous step.");
@@ -559,6 +565,7 @@ public class MalmoEnvServer implements IWantToQuit {
         }
 
         // TimeHelper.SyncManager.debugLog("[MALMO_ENV_SERVER] <STEP> Done with step.");
+        profiler.endSection(); // rootServer
     }
 
     // Handler for <StepClient_> messages. Single digit option code after _ specifies if turnkey and info are included in message.
@@ -574,7 +581,17 @@ public class MalmoEnvServer implements IWantToQuit {
     // Handler for <StepServer_> messages.
     private void stepServer(String command, Socket socket) throws IOException {
         if(envState.synchronous){
+            long start = System.nanoTime();
+
             stepServerSync(command, socket);
+
+            if (nsteps % 100 == 0 && debug){
+                List<Profiler.Result> dat = profiler.getProfilingData("root");
+                for(int qq = 0; qq < dat.size(); qq++){
+                    Profiler.Result res = dat.get(qq);
+                    System.out.println(res.profilerName + " " + res.totalUsePercentage + " "+ res.usePercentage);
+                }
+            }
         }
         else{
             System.out.println("[ERROR] Asynchronous server stepping is not supported in MineRL.");
