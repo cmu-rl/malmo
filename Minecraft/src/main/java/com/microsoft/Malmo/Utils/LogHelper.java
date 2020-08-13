@@ -11,7 +11,7 @@ public class LogHelper {
 
     public static void debugOnce(String message) {
         // only show once
-        int hashCode = hashStack();
+        int hashCode = hashCaller();
         if (silenced.contains(hashCode)) {
             return;
         }
@@ -34,18 +34,11 @@ public class LogHelper {
         e.printStackTrace(System.err);
     }
 
-    private static int hashStack() {
+    private static int hashCaller() {
         StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
-        StringBuilder builder = new StringBuilder();
-        // skip calls: getStackTrace, hashStack
-        for (int i = 2; i < stackTraceElements.length; i++) {
-            StackTraceElement ste = stackTraceElements[i];
-            builder.append(ste.getClassName());
-            builder.append(".");
-            builder.append(ste.getMethodName());
-            builder.append("|");
-        }
-        return builder.toString().hashCode();
+        // skip calls: getStackTrace, hashCaller
+        StackTraceElement ste = stackTraceElements[2];
+        return (ste.getClassName() + "." + ste.getMethodName()).hashCode();
     }
 
 }
