@@ -141,10 +141,6 @@ public class TimeHelper
             shouldClientTick = false;
         }
 
-        public static  synchronized void completeServerTick(){
-            shouldServerTick = false;
-        }
-
         public static synchronized void completeTick(){
             if(shouldFlush){
                 synchronous = false;

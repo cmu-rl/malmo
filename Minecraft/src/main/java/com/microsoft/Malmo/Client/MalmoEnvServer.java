@@ -240,13 +240,21 @@ public class MalmoEnvServer implements IWantToQuit {
                                 socket.close();
                             } catch (IOException ioe2) {
                             }
+                        } catch (Exception e) {
+                            LogHelper.error("Error while processing commands", e);
+                            try {
+                                socket.close();
+                            } catch (IOException ioe2) {
+                            }
                         }
                     }
                 };
                 thread.start();
             } catch (IOException ioe) {
                 TCPUtils.Log(Level.SEVERE, "MalmoEnv service exits on " + ioe);
-                LogHelper.error("MalmoEnvServer died", ioe);
+                LogHelper.error("IO Error while processing commands", ioe);
+            } catch (Exception e) {
+                LogHelper.error("Error while processing commands", e);
             }
         }
     }

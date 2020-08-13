@@ -1185,6 +1185,9 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
                 if (Minecraft.getMinecraft().getCurrentServerData() == null || !Minecraft.getMinecraft().getCurrentServerData().serverIP.equals(targetIP))
                 {
                     net.minecraftforge.fml.client.FMLClientHandler.instance().connectToServerAtStartup(address, port);
+
+                    // TODO - should we wait for a connected notification?
+                    TimeHelper.SyncManager.setServerRunning();
                 }
                 this.waitingForPlayer = false;
             }
