@@ -1188,6 +1188,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
 
                     // TODO - should we wait for a connected notification?
                     TimeHelper.SyncManager.setServerRunning();
+                    TimeHelper.SyncManager.setPistolFired(true);
                 }
                 this.waitingForPlayer = false;
             }

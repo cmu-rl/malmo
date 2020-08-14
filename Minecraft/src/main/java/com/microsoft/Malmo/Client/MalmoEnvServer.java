@@ -412,8 +412,10 @@ public class MalmoEnvServer implements IWantToQuit {
         while (TimeHelper.SyncManager.shouldClientTick()) { Thread.yield(); }
 
         // run a server tick
-        while (!TimeHelper.SyncManager.requestServerTick()) { Thread.yield(); }
-        while (TimeHelper.SyncManager.shouldServerTick()) { Thread.yield(); }
+        if (TimeHelper.SyncManager.role == 0) {
+            while (!TimeHelper.SyncManager.requestServerTick()) { Thread.yield(); }
+            while (TimeHelper.SyncManager.shouldServerTick()) { Thread.yield(); }
+        }
     }
 
     private static final int stepClientTagLength = "<StepClient_>".length(); // Step with option code.
