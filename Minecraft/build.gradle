@@ -6,7 +6,7 @@ buildscript {
         jcenter()
         mavenCentral()
         maven {
-            url = "http://files.minecraftforge.net/maven"
+            url = "https://files.minecraftforge.net/maven"
         }
         maven {
             name = "sonatype"
@@ -44,7 +44,7 @@ def versionProp = new Properties()
 versionProp.load(propFile.newReader())
 version = versionProp['malmomod.version']
 
-group= "com.microsoft.MalmoMod" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
+group= "com.microsoft.MalmoMod" // https://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "MalmoMod"
 
 minecraft {
@@ -63,7 +63,7 @@ minecraft {
 repositories {
     maven {
         name = "SpongePowered Repo"
-        url = "http://repo.spongepowered.org/maven/"
+        url = "https://repo.spongepowered.org/maven/"
     }
     maven { url 'https://jitpack.io' }
 }
