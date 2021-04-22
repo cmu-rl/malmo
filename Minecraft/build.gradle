@@ -6,7 +6,8 @@ buildscript {
         jcenter()
         mavenCentral()
         maven {
-            url = "http://files.minecraftforge.net/maven"
+            name = "forge"
+            url = "https://maven.minecraftforge.net/"
         }
         maven {
             name = "sonatype"
@@ -20,20 +21,26 @@ buildscript {
             // and putting mixin right here will place it before forge in the class loader
             exclude group: 'org.ow2.asm', module: 'asm-debug-all'
         }
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.2-SNAPSHOT'
+
+        classpath 'com.github.brandonhoughton:ForgeGradle:FG_2.2_patched-SNAPSHOT'
     }
 }
-// For versions >= 1.8
+
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '1.2.4'
+}
+
+dependencies {
+    implementation 'com.github.brandonhoughton:forgegradle:FG_2.2_patched-SNAPSHOT'
+}
+
 apply plugin: 'net.minecraftforge.gradle.forge'
 apply plugin: 'org.spongepowered.mixin'
-// For versions < 1.8
-// apply plugin: 'forge'
 
-// ext {
-//     mixinSrg = new File(project.buildDir, 'tmp/mixins/mixins.srg')
-//     mixinRefMap = new File(project.buildDir, 'tmp/mixins/mixins.malmo.refmap.json')
-// }
 
+apply plugin: 'java'
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8' // Need this here so eclipse task generates correctly.
 
 // Read the version number from the Mod's version properties file.
 if (!file('src/main/resources/version.properties').exists()) {
@@ -50,9 +57,9 @@ archivesBaseName = "MalmoMod"
 
 
 minecraft {
-    version = "1.11.2-13.20.0.2228"
+    version = "1.11.2-13.20.1.2588"
     runDir = "run"
-    
+
     // the mappings can be changed at any time, and must be in the following format.
     // snapshot_YYYYMMDD   snapshot are built nightly.
     // stable_#            stables are built at the discretion of the MCP team.
@@ -61,7 +68,9 @@ minecraft {
     mappings = "snapshot_20161220"
     makeObfSourceJar = false // an Srg named sources jar is made by default. uncomment this to disable.
 }
-runClient { 
+
+
+runClient {
     if (project.hasProperty("runDir")) {
         minecraft.runDir = project.getProperty("runDir")
     }
@@ -92,25 +101,35 @@ jar {
 }
 
 // And add to the jvm args so that it is also loaded when running using gradle runClient:
-JavaExec exec = project.getTasks().getByName("runClient")
-exec.jvmArgs(["-Dfml.coreMods.load=com.microsoft.Malmo.OverclockingPlugin","-Xmx2G"])
+JavaExec exec = project.getTasks().getByName("runClient") as JavaExec
+
+exec.jvmArgs(["-Xmx2G", "-Xdebug", "-Dmixin.debug=true"])
+
+// If we have a jvm_debug_port defined and valid (>0), then set it for JDWP debugging.
+if (project.hasProperty("jvm_debug_port")) {
+    def jvm_debug_port = project.getProperty("jvm_debug_port").toInteger()
+    if (jvm_debug_port > 0) {
+        def config_str = "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=${jvm_debug_port}"
+        exec.jvmArgs([config_str])
+        println "JDWP configured at port '${jvm_debug_port}'"
+    }
+}
+
 // ForgeGradle automatically sets the runClient task's outputs to be the runDir above (eg "run"). This
 // means that gradle will helpfully try to take a snapshot of the complete contents of the run folder in order
 // to carry out up-to-date checks for any tasks that depend on runClient.
 // The run folder also contains the logs folder, which, on Windows at least, can contain locked
 // TCP log files, which gradle won't be able to checksum, meaning that the runClient task will fail
 // if there is already a Minecraft running and logging.
-// To prevent this behaviour, we set the outputs to a dummy value:
-exec.getOutputs().files.setFrom(file("dummy_value"))
+
+// To fix this issue, uncomment the following to set the outputs to a dummy value:
+// exec.getOutputs().files.setFrom(file("dummy_value"))
+
 // We also force the up-to-date check to return false, since the user will ALWAYS want runClient to run.
 exec.getOutputs().upToDateWhen( { return false } )
 
 dependencies {
-    // compile 'com.github.SpongePowered:Mixin:404f5da' // 0.7.5-SNAPSHOT
-    // ^ mixin doesn't compile on jitpack, so we'll have to depend on the SNAPSHOT and build it manually for reprod
-    //shade group: 'org.apache.commons', name: 'com.springsource.org.apache.commons.codec', version: '1.6.0'
     compile 'org.spongepowered:mixin:0.7.5-SNAPSHOT'
-
 }
 
 processResources
@@ -122,11 +141,11 @@ processResources
     // replace stuff in mcmod.info, nothing else
     from(sourceSets.main.resources.srcDirs) {
         include 'mcmod.info'
-                
+
         // replace version and mcversion
         expand 'version':project.version, 'mcversion':project.minecraft.version
     }
-        
+
     // copy everything else, thats not the mcmod.info
     from(sourceSets.main.resources.srcDirs) {
         exclude 'mcmod.info'
@@ -170,7 +189,7 @@ project.tasks.idea.dependsOn copySrg
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 compileJava.doLast {
-    File refmapFile =  compileJava.ext.refMapFile 
+    File refmapFile =  compileJava.ext.refMapFile
     if (refmapFile.exists()) {
         def ordered
         ordered = {
@@ -284,7 +303,7 @@ task jaxb() {
 
     inputs.files fileTree( dir: 'src/main/resources', include:'*.xsd' )
     outputs.dir 'src/main/java/com/microsoft/Malmo/Schemas'
-    
+
     doLast {
         // first clear the old .java files out of the folder in case some are no longer current
         delete fileTree(dir: 'src/main/java/com/microsoft/Malmo/Schemas', include: '*.java')
@@ -325,6 +344,16 @@ task copyModToServer(type: Copy) {
     from 'build/libs/'
     into '../Minecraft/.minecraftserver/mods'
     include ('*.jar')
+}
+
+// Interesting. We've packaged forge gradle into the full jar and use gradle inherently??
+shadowJar {
+    classifier = 'fat'
+    configurations = [project.configurations.all.findAll {it.canBeResolved}] as List<Configuration>
+
+    manifest {
+        attributes "Main-Class": "com.microsoft.Malmo.Launcher.GradleStart"
+    }
 }
 
 javadoc.dependsOn copyMds
