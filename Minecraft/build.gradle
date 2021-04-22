@@ -32,7 +32,7 @@ plugins {
 }
 
 dependencies {
-    implementation 'com.github.brandonhoughton:forgegradle:FG_2.2_patched-SNAPSHOT'
+    compile 'com.github.brandonhoughton:forgegradle:FG_2.2_patched-SNAPSHOT'
 }
 
 apply plugin: 'net.minecraftforge.gradle.forge'
@@ -344,16 +344,6 @@ task copyModToServer(type: Copy) {
     from 'build/libs/'
     into '../Minecraft/.minecraftserver/mods'
     include ('*.jar')
-}
-
-// Interesting. We've packaged forge gradle into the full jar and use gradle inherently??
-shadowJar {
-    classifier = 'fat'
-    configurations = [project.configurations.all.findAll {it.canBeResolved}] as List<Configuration>
-
-    manifest {
-        attributes "Main-Class": "com.microsoft.Malmo.Launcher.GradleStart"
-    }
 }
 
 javadoc.dependsOn copyMds
