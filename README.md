@@ -4,8 +4,32 @@ Project Malmö is a platform for Artificial Intelligence experimentation and res
 
 [![Join the chat at https://gitter.im/Microsoft/malmo](https://badges.gitter.im/Microsoft/malmo.svg)](https://gitter.im/Microsoft/malmo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/Microsoft/malmo.svg?branch=master)](https://travis-ci.org/Microsoft/malmo) [![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/Microsoft/malmo/blob/master/LICENSE.txt)
 ----
+
+## Building
+Make sure your sub-projects are up-to-date: `git submodule update --init --recursive`
+
+After the initial clone, running `./gradlew setupDecompWorkspace` is necessary. This may take quite some time.
+This will also be necessary if the `replaymod_at.cfg` file has been changed (getting errors about code that is trying 
+to access private fields is a good indication that this has happened).
+
+### IntelliJ
+Before importing anythin into IntelliJ! run `./gradlew idea genIntellijRuns`.
+( no need to import any additional gradle files - this command should make a working project for you
+You then need to enable the Mixin annotation processor in intelliJ:
+1. Go to File -> Settings -> Build, Execution, Deployment -> Compiler -> Annotation Processors
+2. Tick "Enable annotation processing"
+3. Add a new entry to the "Annotation Processor options"
+4. Set the name to "reobfSrgFile" and the value to "$path/build/mcp-srg.srg" where you replace $path with the full 
+path to the folder containing the gradlew file
+
+You should install the Minecraft development plugins as well to assist you in developing in Malmo
+
+
     
 ## Getting Started ##
+
+### Intellij ###
+Download 
 
 ### *** NEW  *** ###
 
